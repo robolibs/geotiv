@@ -310,7 +310,9 @@ namespace geotiv {
             // ModelPixelScale → resolution for this IFD
             auto scales = readDoubles(33550);
             if (scales.size() >= 2) {
-                layerResolution = scales[0]; // X scale
+                // PixelScale is stored in degrees, convert back to meters for internal resolution
+                double resolution_deg_lon = scales[0]; // X scale in degrees
+                layerResolution = resolution_deg_lon * (111320.0 * std::cos(layerDatum.lat * M_PI / 180.0));
                 // Could also check that scales[0] == scales[1] for square pixels
             }
 
@@ -357,7 +359,8 @@ namespace geotiv {
             // Fill grid with pixel data
             if (L.planarConfig == 1) { // Chunky format
                 size_t idx = 0;
-                for (uint32_t r = 0; r < L.height; ++r) {
+                // Data is written bottom-row-first, so flip it back when reading
+                for (int32_t r = L.height - 1; r >= 0; --r) {
                     for (uint32_t c = 0; c < L.width; ++c) {
                         // For multi-sample pixels, take first sample
                         grid(r, c) = pix[idx];
@@ -367,7 +370,8 @@ namespace geotiv {
             } else { // Planar format
                 // Take first plane only
                 size_t idx = 0;
-                for (uint32_t r = 0; r < L.height; ++r) {
+                // Data is written bottom-row-first, so flip it back when reading
+                for (int32_t r = L.height - 1; r >= 0; --r) {
                     for (uint32_t c = 0; c < L.width; ++c) {
                         grid(r, c) = pix[idx++];
                     }
