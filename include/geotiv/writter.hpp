@@ -300,11 +300,23 @@ namespace geotiv {
 
             // PixelScale doubles: X, Y, Z
             writePos = scaleOffsets[i];
-            // Convert resolution from meters to degrees (latitude-dependent conversion for WGS84)
-            double resolution_deg_lat = layer.resolution / 111320.0; // Latitude: ~111,320 m/degree globally
-            double resolution_deg_lon = layer.resolution / (111320.0 * std::cos(layer.datum.lat * M_PI / 180.0)); // Longitude: varies with latitude
+            // Use precise concord library conversions for cm/mm accuracy
+            // Create ENU points at datum center and at resolution distance
+            concord::ENU center_enu{0.0, 0.0, 0.0, layer.datum};
+            concord::ENU east_point_enu{layer.resolution, 0.0, 0.0, layer.datum};  // resolution meters east
+            concord::ENU north_point_enu{0.0, layer.resolution, 0.0, layer.datum}; // resolution meters north
+            
+            // Convert to WGS84 for precise degree differences
+            concord::WGS center_wgs = center_enu.toWGS();
+            concord::WGS east_point_wgs = east_point_enu.toWGS();
+            concord::WGS north_point_wgs = north_point_enu.toWGS();
+            
+            // Calculate precise degree per meter scaling
+            double resolution_deg_lon = east_point_wgs.lon - center_wgs.lon;    // precise longitude scale
+            double resolution_deg_lat = north_point_wgs.lat - center_wgs.lat;   // precise latitude scale
+            
             writeDouble(resolution_deg_lon); // X scale in degrees (longitude, positive = eastward)  
-            writeDouble(resolution_deg_lat); // Y scale in degrees (latitude, positive = southward from top-left)
+            writeDouble(-resolution_deg_lat); // Y scale in degrees (negative = rows increase southward)
             writeDouble(0.0);                // Z scale
 
             // GeoKeyDirectory for this layer (always WGS84)

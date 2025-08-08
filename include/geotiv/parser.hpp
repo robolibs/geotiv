@@ -310,10 +310,20 @@ namespace geotiv {
             // ModelPixelScale → resolution for this IFD
             auto scales = readDoubles(33550);
             if (scales.size() >= 2) {
-                // PixelScale is stored in degrees, convert back to meters for internal resolution
+                // PixelScale is stored in degrees, use precise concord conversions to get back meters
                 double resolution_deg_lon = scales[0]; // X scale in degrees
-                layerResolution = resolution_deg_lon * (111320.0 * std::cos(layerDatum.lat * M_PI / 180.0));
-                // Could also check that scales[0] == scales[1] for square pixels
+                // scales[1] is Y scale (negative for standard GeoTIFF), but we use X scale for resolution
+                
+                // Use precise concord conversion: create two WGS points and convert to ENU to get distance
+                concord::WGS center_wgs{layerDatum.lat, layerDatum.lon, layerDatum.alt};
+                concord::WGS east_point_wgs{layerDatum.lat, layerDatum.lon + resolution_deg_lon, layerDatum.alt};
+                
+                concord::ENU center_enu = center_wgs.toENU(layerDatum);
+                concord::ENU east_point_enu = east_point_wgs.toENU(layerDatum);
+                
+                // Calculate precise meter distance (use absolute value since Y scale is negative)
+                layerResolution = east_point_enu.x - center_enu.x;
+                // Could also verify with Y direction: abs(north_point_enu.y - center_enu.y)
             }
 
             if (layerResolution <= 0) {
