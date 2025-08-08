@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.2] - 2025-08-08
+
+### <!-- 0 -->⛰️  Features
+
+- Refactor: Improve coordinate system conversions
+
 ## [2.0.1] - 2025-08-08
 
 ### <!-- 1 -->🐛 Bug Fixes
