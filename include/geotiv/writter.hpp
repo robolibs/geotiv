@@ -39,8 +39,9 @@ namespace geotiv {
             strips[i].resize(sz);
             stripCounts[i] = uint32_t(sz);
             // fill chunky: band0,band1,... per pixel
+            // Flip vertically: write bottom row first to match GeoTIFF coordinate system
             size_t idx = 0;
-            for (uint32_t r = 0; r < H; ++r) {
+            for (int32_t r = H - 1; r >= 0; --r) { // Start from bottom row, go up
                 for (uint32_t c = 0; c < W; ++c) {
                     uint8_t v = g(r, c);
                     for (uint32_t s = 0; s < S; ++s) {
@@ -124,7 +125,7 @@ namespace geotiv {
             p += 24; // 3 doubles = 24 bytes
 
             geoKeyOffsets[i] = p;
-            p += 56; // GeoKeyDirectory = 56 bytes (4 keys for WGS84)
+            p += 40; // GeoKeyDirectory = 40 bytes (header:8 + 4 keys×8 = 40)
 
             tiepointOffsets[i] = p;
             p += 48; // ModelTiepointTag = 48 bytes (6 doubles)
@@ -257,17 +258,17 @@ namespace geotiv {
             writeLE32(3);
             writeLE32(scaleOffsets[i]);
 
-            // Tag 34735: GeoKeyDirectoryTag
-            writeLE16(34735);
-            writeLE16(3);
-            writeLE32(14);
-            writeLE32(geoKeyOffsets[i]);
-
-            // Tag 33922: ModelTiepointTag
+            // Tag 33922: ModelTiepointTag (must come before 34735)
             writeLE16(33922);
             writeLE16(12);
             writeLE32(6);
             writeLE32(tiepointOffsets[i]);
+
+            // Tag 34735: GeoKeyDirectoryTag
+            writeLE16(34735);
+            writeLE16(3);
+            writeLE32(20);  // 20 uint16 values: header(4) + 4 keys×4 = 20
+            writeLE32(geoKeyOffsets[i]);
 
             // Write custom tags for this layer
             uint32_t customDataPos = customDataOffsets[i];
@@ -299,9 +300,12 @@ namespace geotiv {
 
             // PixelScale doubles: X, Y, Z
             writePos = scaleOffsets[i];
-            writeDouble(layer.resolution); // X scale
-            writeDouble(layer.resolution); // Y scale
-            writeDouble(0.0);              // Z scale
+            // Convert resolution from meters to degrees (latitude-dependent conversion for WGS84)
+            double resolution_deg_lat = layer.resolution / 111320.0; // Latitude: ~111,320 m/degree globally
+            double resolution_deg_lon = layer.resolution / (111320.0 * std::cos(layer.datum.lat * M_PI / 180.0)); // Longitude: varies with latitude
+            writeDouble(resolution_deg_lon); // X scale in degrees (longitude, positive = eastward)  
+            writeDouble(resolution_deg_lat); // Y scale in degrees (latitude, positive = southward from top-left)
+            writeDouble(0.0);                // Z scale
 
             // GeoKeyDirectory for this layer (always WGS84)
             writePos = geoKeyOffsets[i];
@@ -341,18 +345,27 @@ namespace geotiv {
             uint32_t H = uint32_t(g.rows());
 
             // Tiepoint format: I,J,K,X,Y,Z where (I,J,K) are pixel coords and (X,Y,Z) are world coords
-            // We'll tie the center of the image to the world coordinates calculated from shift
-            writeDouble(W / 2.0); // I: pixel column (center)
-            writeDouble(H / 2.0); // J: pixel row (center)
-            writeDouble(0.0);     // K: always 0 for 2D
+            // Standard practice: tie pixel (0,0) to top-left corner world coordinates
+            writeDouble(0.0); // I: pixel column 0 (left edge)
+            writeDouble(0.0); // J: pixel row 0 (top edge) 
+            writeDouble(0.0); // K: always 0 for 2D
 
-            // Convert shift (ENU) to WGS84 coordinates using datum
-            concord::ENU enuShift{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};
-            concord::WGS anchorWGS = enuShift.toWGS();
-
-            writeDouble(anchorWGS.lon); // X: longitude
-            writeDouble(anchorWGS.lat); // Y: latitude
-            writeDouble(anchorWGS.alt); // Z: altitude
+            // Calculate top-left corner coordinates from grid center (shift)
+            // Use the latitude-dependent longitude scaling calculated earlier
+            double half_width = (W * resolution_deg_lon) / 2.0;
+            double half_height = (H * resolution_deg_lat) / 2.0;
+            
+            // Convert center to WGS84 first
+            concord::ENU enuCenter{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};
+            concord::WGS centerWGS = enuCenter.toWGS();
+            
+            // Calculate top-left corner from center
+            double top_left_lon = centerWGS.lon - half_width;   // West of center
+            double top_left_lat = centerWGS.lat + half_height;  // North of center (top)
+            
+            writeDouble(top_left_lon); // X: longitude of top-left corner
+            writeDouble(top_left_lat); // Y: latitude of top-left corner  
+            writeDouble(centerWGS.alt); // Z: altitude
 
             // Write custom tag data for this layer
             writePos = customDataOffsets[i];
