@@ -114,7 +114,7 @@ namespace geotiv {
                 layer.grid = gridLayer.grid;
                 layer.width = static_cast<uint32_t>(gridLayer.grid.cols());
                 layer.height = static_cast<uint32_t>(gridLayer.grid.rows());
-                layer.resolution = resolution_;
+                layer.resolution = gridLayer.grid.inradius(); // Use the actual grid's resolution
                 layer.datum = datum_;
                 layer.shift = shift_;
                 layer.samplesPerPixel = 1;

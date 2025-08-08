@@ -363,9 +363,24 @@ namespace geotiv {
             writeDouble(0.0); // K: always 0 for 2D
 
             // Calculate top-left corner coordinates from grid center (shift)
-            // Use the latitude-dependent longitude scaling calculated earlier
-            double half_width = (W * resolution_deg_lon) / 2.0;
-            double half_height = (H * resolution_deg_lat) / 2.0;
+            // First get grid dimensions in meters, then convert to degrees
+            double grid_width_meters = W * layer.resolution;   // Total width in meters
+            double grid_height_meters = H * layer.resolution;  // Total height in meters
+            
+            // Convert half-extents from meters to degrees using precise conversion
+            // We need to calculate how many degrees the grid spans
+            concord::ENU grid_west{-grid_width_meters/2.0, 0.0, 0.0, layer.datum};
+            concord::ENU grid_east{grid_width_meters/2.0, 0.0, 0.0, layer.datum};
+            concord::ENU grid_south{0.0, -grid_height_meters/2.0, 0.0, layer.datum};
+            concord::ENU grid_north{0.0, grid_height_meters/2.0, 0.0, layer.datum};
+            
+            concord::WGS west_wgs = grid_west.toWGS();
+            concord::WGS east_wgs = grid_east.toWGS();
+            concord::WGS south_wgs = grid_south.toWGS();
+            concord::WGS north_wgs = grid_north.toWGS();
+            
+            double half_width = (east_wgs.lon - west_wgs.lon) / 2.0;   // Half width in degrees
+            double half_height = (north_wgs.lat - south_wgs.lat) / 2.0; // Half height in degrees
             
             // Convert center to WGS84 first
             concord::ENU enuCenter{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};
