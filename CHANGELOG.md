@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.1] - 2025-08-08
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Adjust pixel data handling for accurate representation
+- Adjust GeoTIFF image and coordinate system metadata
+
+### <!-- 4 -->⚡ Performance
+
+- Improve GeoTIFF pixel scale conversions with `concord`
+
 ## [2.0.0] - 2025-07-09
 
 ### <!-- 0 -->⛰️  Features
