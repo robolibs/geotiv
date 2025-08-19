@@ -22,7 +22,7 @@ include(FetchContent)
 
 # --------------------------------------------------------------------------------------------------
 set(ext_deps)
-FetchContent_Declare(concord GIT_REPOSITORY https://github.com/smolfetch/concord.git GIT_TAG 2.2.0)
+FetchContent_Declare(concord GIT_REPOSITORY https://github.com/smolfetch/concord.git GIT_TAG 2.3.2)
 FetchContent_MakeAvailable(concord)
 list(APPEND ext_deps concord::concord)
 
@@ -66,7 +66,7 @@ export(EXPORT ${project_name}Targets
 
 # --------------------------------------------------------------------------------------------------
 if(${project_name_upper}_BUILD_EXAMPLES)
-  file(GLOB exe examples/*.cpp)
+  file(GLOB exe CONFIGURE_DEPENDS examples/*.cpp)
   # ----------------------------------------------
   set(exec_names)
   foreach(src_file IN LISTS exe)
@@ -106,7 +106,7 @@ if(${project_name_upper}_ENABLE_TESTS)
   )
   FetchContent_MakeAvailable(DocTest)
 
-  file(GLOB test_src test/*.cpp)
+  file(GLOB test_src CONFIGURE_DEPENDS test/*.cpp)
 
   foreach(src_file IN LISTS test_src)
     get_filename_component(test_name "${src_file}" NAME_WE)
