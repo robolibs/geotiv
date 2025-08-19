@@ -283,4 +283,63 @@ namespace geotiv {
         auto cend() const { return grid_layers_.cend(); }
     };
 
+    /// Read a GeoTIFF and reconstruct as concord::Layer<uint8_t>
+    template<typename T = uint8_t>
+    concord::Layer<T> ReadLayerCollection(const std::filesystem::path &path) {
+        auto rc = geotiv::ReadRasterCollection(path);
+        
+        if (rc.layers.empty()) {
+            throw std::runtime_error("No layers found in file");
+        }
+        
+        // Use the standard geospatial metadata from RasterCollection
+        double resolution = rc.resolution; // Use resolution from RasterCollection
+        concord::Pose shift = rc.shift; // Use shift from RasterCollection
+        
+        // Parse layer height and other metadata from the first layer's description
+        double layerHeight = 1.0; // default
+        const auto& firstLayer = rc.layers[0];
+        if (!firstLayer.imageDescription.empty()) {
+            std::string desc = firstLayer.imageDescription;
+            
+            // Look for LayerHeight=X.X in description
+            size_t pos = desc.find("LayerHeight=");
+            if (pos != std::string::npos) {
+                pos += 12; // length of "LayerHeight="
+                size_t endPos = desc.find(' ', pos);
+                if (endPos == std::string::npos) endPos = desc.length();
+                std::string heightStr = desc.substr(pos, endPos - pos);
+                layerHeight = std::stod(heightStr);
+            }
+            
+        }
+        
+        // Use metadata from the first layer
+        size_t rows = firstLayer.height;
+        size_t cols = firstLayer.width;
+        size_t layerCount = rc.layers.size();
+        
+        // Use the shift from RasterCollection (already has correct Z coordinate)
+        concord::Pose correctShift = shift;
+        
+        // Create the 3D Layer
+        concord::Layer<T> layer3d(rows, cols, layerCount, resolution, layerHeight, 
+                                 true, correctShift, false, false);
+        
+        // Fill data from each IFD
+        for (size_t layerIdx = 0; layerIdx < layerCount; ++layerIdx) {
+            const auto& ifdLayer = rc.layers[layerIdx];
+            const auto& grid2d = ifdLayer.grid;
+            
+            // Copy data from 2D grid to 3D layer
+            for (size_t r = 0; r < rows; ++r) {
+                for (size_t c = 0; c < cols; ++c) {
+                    layer3d(r, c, layerIdx) = static_cast<T>(grid2d(r, c));
+                }
+            }
+        }
+        
+        return layer3d;
+    }
+
 } // namespace geotiv
