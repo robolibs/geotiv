@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.0] - 2025-08-19
+
+### <!-- 0 -->⛰️  Features
+
+- Enhance GeoTIFF layer handling and examples
+
+### Build
+
+- Update build configuration for `concord` and CMake
+
 ## [2.0.2] - 2025-08-08
 
 ### <!-- 0 -->⛰️  Features
