@@ -28,10 +28,7 @@ list(APPEND ext_deps concord::concord)
 
 # --------------------------------------------------------------------------------------------------
 # Build library
-set(SOURCES
-    src/parser.cpp
-    src/writter.cpp
-)
+file(GLOB SOURCES CONFIGURE_DEPENDS src/*.cpp)
 
 add_library(${project_name} ${SOURCES})
 add_library(${project_name}::${project_name} ALIAS ${project_name})
