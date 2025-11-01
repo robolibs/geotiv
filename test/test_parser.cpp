@@ -3,6 +3,7 @@
 #include <doctest/doctest.h>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 
 TEST_CASE("GeoTIFF Parser functionality") {
     SUBCASE("Round-trip test: Write then Read") {
