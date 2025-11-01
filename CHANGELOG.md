@@ -4,6 +4,17 @@
 
 ### <!-- 0 -->⛰️  Features
 
+- Refactor I/O into a library and introduce raster management
+- Introduce 3D layer I/O and GeoTIFF parser utilities
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Streamline build process and dependencies
+
+## [3.0.0] - 2025-11-01
+
+### <!-- 0 -->⛰️  Features
+
 - Introduce 3D layer I/O and GeoTIFF parser utilities
 
 ### <!-- 7 -->⚙️ Miscellaneous Tasks
