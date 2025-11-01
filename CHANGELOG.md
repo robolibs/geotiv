@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.0] - 2025-11-01
+
+### <!-- 0 -->⛰️  Features
+
+- Introduce 3D layer I/O and GeoTIFF parser utilities
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Streamline build process and dependencies
+
 ## [2.1.0] - 2025-08-19
 
 ### <!-- 0 -->⛰️  Features

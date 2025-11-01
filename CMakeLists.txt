@@ -27,28 +27,43 @@ FetchContent_MakeAvailable(concord)
 list(APPEND ext_deps concord::concord)
 
 # --------------------------------------------------------------------------------------------------
-add_library(${project_name} INTERFACE)
-# Allow users to link via `${project_name}::${project_name}`
-add_library(${project_name}::${project_name} ALIAS ${project_name})
-target_include_directories(${project_name} INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+# Build library
+set(SOURCES
+    src/parser.cpp
+    src/writter.cpp
 )
 
-install(
-  DIRECTORY include/
-  DESTINATION include
+add_library(${project_name} ${SOURCES})
+add_library(${project_name}::${project_name} ALIAS ${project_name})
+
+target_include_directories(${project_name} 
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
 )
+
+target_link_libraries(${project_name} PRIVATE ${ext_deps})
+
+# Export concord as a public dependency (headers use it)
+target_link_libraries(${project_name} PUBLIC concord::concord)
+
+target_compile_options(${project_name} PRIVATE ${params})
+
 include_directories(include)
 
 # --------------------------------------------------------------------------------------------------
 include(GNUInstallDirs)
 
-#Install headers
+# Install headers
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-#Install and export the INTERFACE target
-install(TARGETS ${project_name} EXPORT ${project_name}Targets)
+# Install library and export targets
+install(TARGETS ${project_name} 
+    EXPORT ${project_name}Targets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
 
 #Install the export file so that `find_package(${project_name})` works
 install(EXPORT ${project_name}Targets
@@ -66,17 +81,14 @@ export(EXPORT ${project_name}Targets
 
 # --------------------------------------------------------------------------------------------------
 if(${project_name_upper}_BUILD_EXAMPLES)
-  file(GLOB exe CONFIGURE_DEPENDS examples/*.cpp)
+  file(GLOB exe examples/*.cpp)
   # ----------------------------------------------
   set(exec_names)
   foreach(src_file IN LISTS exe)
     get_filename_component(exec_name "${src_file}" NAME_WE)
     add_executable(${exec_name} "${src_file}")
-      foreach(lib_file IN LISTS internal_deps)
-        target_compile_options(${exec_name} PRIVATE ${params})
-        target_sources(${exec_name} PRIVATE "${lib_file}")
-      endforeach()
-    target_link_libraries(${exec_name} ${ext_deps})
+    target_compile_options(${exec_name} PRIVATE ${params})
+    target_link_libraries(${exec_name} ${project_name}::${project_name})
     install(TARGETS ${exec_name} DESTINATION bin)
     list(APPEND exec_names ${exec_name})
   endforeach()
@@ -111,11 +123,8 @@ if(${project_name_upper}_ENABLE_TESTS)
   foreach(src_file IN LISTS test_src)
     get_filename_component(test_name "${src_file}" NAME_WE)
     add_executable(${test_name} "${src_file}")
-      foreach(lib_file IN LISTS internal_deps)
-        target_compile_options(${test_name} PRIVATE ${params})
-        target_sources(${test_name} PRIVATE "${lib_file}")
-      endforeach()
-    target_link_libraries(${test_name} ${ext_deps} doctest_with_main)
+    target_compile_options(${test_name} PRIVATE ${params})
+    target_link_libraries(${test_name} ${project_name}::${project_name} doctest_with_main)
     add_test(NAME ${test_name} COMMAND ${test_name})
   endforeach()
 endif()
