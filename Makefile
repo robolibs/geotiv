@@ -62,7 +62,7 @@ help:
 	@echo "  run          Run the main executable"
 	@echo "  test         Run tests"
 	@echo "  docs         Build documentation (TYPE=mdbook|doxygen)"
-	@echo "  release      Create a new release (TYPE=patch|minor|major)"
+	@echo "  release      Create a new release (TYPE=patch|minor|major|same)"
 	@echo
 
 h : help
@@ -86,7 +86,7 @@ endif
 
 release:
 	@if [ -z "$(TYPE)" ]; then \
-		echo "Release type not specified. Use 'make release TYPE=[patch|minor|major]'"; \
+		echo "Release type not specified. Use 'make release TYPE=[patch|minor|major|same]'"; \
 		exit 1; \
 	fi; \
 	CURRENT_VERSION=$$(grep -E '^project\(.*VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/'); \
@@ -95,9 +95,15 @@ release:
 		major) MAJOR=$$((MAJOR+1)); MINOR=0; PATCH=0 ;; \
 		minor) MINOR=$$((MINOR+1)); PATCH=0 ;; \
 		patch) PATCH=$$((PATCH+1)); ;; \
-		*) echo "Invalid release type. Use patch, minor or major."; exit 1 ;; \
+		same) ;; \
+		*) echo "Invalid release type. Use patch, minor, major, or same."; exit 1 ;; \
 	esac; \
 	version="$$MAJOR.$$MINOR.$$PATCH"; \
+	if [ "$(TYPE)" = "same" ]; then \
+		git tag -d $$version 2>/dev/null || true; \
+		git push origin :refs/tags/$$version 2>/dev/null || true; \
+		gh release delete $$version -y 2>/dev/null || true; \
+	fi; \
 	if [ -n "$(LATEST_TAG)" ]; then \
 		changelog=$$(git cliff $(LATEST_TAG)..HEAD --strip all); \
 		git cliff --tag $$version $(LATEST_TAG)..HEAD --prepend CHANGELOG.md; \
@@ -105,7 +111,9 @@ release:
 		changelog=$$(git cliff --unreleased --strip all); \
 		git cliff --tag $$version --unreleased --prepend CHANGELOG.md; \
 	fi; \
-	sed -i -E 's/(project\(.*VERSION )[0-9]+\.[0-9]+\.[0-9]+/\1'$$version'/' CMakeLists.txt; \
+	if [ "$(TYPE)" != "same" ]; then \
+		sed -i -E 's/(project\(.*VERSION )[0-9]+\.[0-9]+\.[0-9]+/\1'$$version'/' CMakeLists.txt; \
+	fi; \
 	git add -A && git commit -m "chore(release): prepare for $$version"; \
 	echo "$$changelog"; \
 	git tag -a $$version -m "$$version" -m "$$changelog"; \
