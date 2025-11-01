@@ -6,7 +6,6 @@
     "clang-tools@latest",
     "gcc@latest",
     "stdenv@latest",
-    "arrow-cpp@latest"
   ],
   "shell": {
     "init_hook": [
