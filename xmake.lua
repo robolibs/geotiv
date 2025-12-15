@@ -1,5 +1,5 @@
 set_project("geotiv")
-set_version("3.0.0")
+set_version("3.1.0")
 set_xmakever("2.7.0")
 
 -- Set C++ standard

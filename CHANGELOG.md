@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.0] - 2025-12-15
+
+### Build
+
+- Refactor build system to support both `xmake` and `cmake`
+
 ## [3.0.0] - 2025-11-01
 
 ### <!-- 0 -->⛰️  Features
