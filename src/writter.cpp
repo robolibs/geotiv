@@ -266,7 +266,7 @@ namespace geotiv {
             // Tag 34735: GeoKeyDirectoryTag
             writeLE16(34735);
             writeLE16(3);
-            writeLE32(20);  // 20 uint16 values: header(4) + 4 keys×4 = 20
+            writeLE32(20); // 20 uint16 values: header(4) + 4 keys×4 = 20
             writeLE32(geoKeyOffsets[i]);
 
             // Write custom tags for this layer
@@ -302,21 +302,23 @@ namespace geotiv {
             // Use precise concord library conversions for cm/mm accuracy
             // Create ENU points at grid center and at resolution distance from center
             concord::ENU center_enu{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};
-            concord::ENU east_point_enu{layer.shift.point.x + layer.resolution, layer.shift.point.y, layer.shift.point.z, layer.datum};  // resolution meters east from center
-            concord::ENU north_point_enu{layer.shift.point.x, layer.shift.point.y + layer.resolution, layer.shift.point.z, layer.datum}; // resolution meters north from center
-            
+            concord::ENU east_point_enu{layer.shift.point.x + layer.resolution, layer.shift.point.y,
+                                        layer.shift.point.z, layer.datum}; // resolution meters east from center
+            concord::ENU north_point_enu{layer.shift.point.x, layer.shift.point.y + layer.resolution,
+                                         layer.shift.point.z, layer.datum}; // resolution meters north from center
+
             // Convert to WGS84 for precise degree differences
             concord::WGS center_wgs = center_enu.toWGS();
             concord::WGS east_point_wgs = east_point_enu.toWGS();
             concord::WGS north_point_wgs = north_point_enu.toWGS();
-            
+
             // Calculate precise degree per meter scaling
-            double resolution_deg_lon = east_point_wgs.lon - center_wgs.lon;    // precise longitude scale
-            double resolution_deg_lat = north_point_wgs.lat - center_wgs.lat;   // precise latitude scale
-            
-            writeDouble(resolution_deg_lon); // X scale in degrees (longitude, positive = eastward)  
+            double resolution_deg_lon = east_point_wgs.lon - center_wgs.lon;  // precise longitude scale
+            double resolution_deg_lat = north_point_wgs.lat - center_wgs.lat; // precise latitude scale
+
+            writeDouble(resolution_deg_lon);  // X scale in degrees (longitude, positive = eastward)
             writeDouble(-resolution_deg_lat); // Y scale in degrees (negative = rows increase southward)
-            writeDouble(0.0);                // Z scale
+            writeDouble(0.0);                 // Z scale
 
             // GeoKeyDirectory for this layer (always WGS84)
             writePos = geoKeyOffsets[i];
@@ -358,39 +360,43 @@ namespace geotiv {
             // Tiepoint format: I,J,K,X,Y,Z where (I,J,K) are pixel coords and (X,Y,Z) are world coords
             // Standard practice: tie pixel (0,0) to top-left corner world coordinates
             writeDouble(0.0); // I: pixel column 0 (left edge)
-            writeDouble(0.0); // J: pixel row 0 (top edge) 
+            writeDouble(0.0); // J: pixel row 0 (top edge)
             writeDouble(0.0); // K: always 0 for 2D
 
             // Calculate top-left corner coordinates from grid center (shift)
             // First get grid dimensions in meters, then convert to degrees
-            double grid_width_meters = W * layer.resolution;   // Total width in meters
-            double grid_height_meters = H * layer.resolution;  // Total height in meters
-            
+            double grid_width_meters = W * layer.resolution;  // Total width in meters
+            double grid_height_meters = H * layer.resolution; // Total height in meters
+
             // Convert half-extents from meters to degrees using precise conversion
             // We need to calculate how many degrees the grid spans from the grid center (shift point)
-            concord::ENU grid_west{layer.shift.point.x - grid_width_meters/2.0, layer.shift.point.y, layer.shift.point.z, layer.datum};
-            concord::ENU grid_east{layer.shift.point.x + grid_width_meters/2.0, layer.shift.point.y, layer.shift.point.z, layer.datum};
-            concord::ENU grid_south{layer.shift.point.x, layer.shift.point.y - grid_height_meters/2.0, layer.shift.point.z, layer.datum};
-            concord::ENU grid_north{layer.shift.point.x, layer.shift.point.y + grid_height_meters/2.0, layer.shift.point.z, layer.datum};
-            
+            concord::ENU grid_west{layer.shift.point.x - grid_width_meters / 2.0, layer.shift.point.y,
+                                   layer.shift.point.z, layer.datum};
+            concord::ENU grid_east{layer.shift.point.x + grid_width_meters / 2.0, layer.shift.point.y,
+                                   layer.shift.point.z, layer.datum};
+            concord::ENU grid_south{layer.shift.point.x, layer.shift.point.y - grid_height_meters / 2.0,
+                                    layer.shift.point.z, layer.datum};
+            concord::ENU grid_north{layer.shift.point.x, layer.shift.point.y + grid_height_meters / 2.0,
+                                    layer.shift.point.z, layer.datum};
+
             concord::WGS west_wgs = grid_west.toWGS();
             concord::WGS east_wgs = grid_east.toWGS();
             concord::WGS south_wgs = grid_south.toWGS();
             concord::WGS north_wgs = grid_north.toWGS();
-            
-            double half_width = (east_wgs.lon - west_wgs.lon) / 2.0;   // Half width in degrees
+
+            double half_width = (east_wgs.lon - west_wgs.lon) / 2.0;    // Half width in degrees
             double half_height = (north_wgs.lat - south_wgs.lat) / 2.0; // Half height in degrees
-            
+
             // Convert center to WGS84 first
             concord::ENU enuCenter{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};
             concord::WGS centerWGS = enuCenter.toWGS();
-            
+
             // Calculate top-left corner from center
-            double top_left_lon = centerWGS.lon - half_width;   // West of center
-            double top_left_lat = centerWGS.lat + half_height;  // North of center (top)
-            
-            writeDouble(top_left_lon); // X: longitude of top-left corner
-            writeDouble(top_left_lat); // Y: latitude of top-left corner  
+            double top_left_lon = centerWGS.lon - half_width;  // West of center
+            double top_left_lat = centerWGS.lat + half_height; // North of center (top)
+
+            writeDouble(top_left_lon);  // X: longitude of top-left corner
+            writeDouble(top_left_lat);  // Y: latitude of top-left corner
             writeDouble(centerWGS.alt); // Z: altitude
 
             // Write custom tag data for this layer
@@ -417,11 +423,10 @@ namespace geotiv {
     }
 
     /// Write a Concord Layer as a GeoTIFF with multiple IFDs (one per Z layer)
-    template<typename T>
-    void WriteLayerCollection(const concord::Layer<T>& layer3d, 
-                             const fs::path& outPath,
-                             const concord::Datum& datum = concord::Datum{0.001, 0.001, 1.0}) {
-        
+    template <typename T>
+    void WriteLayerCollection(const concord::Layer<T> &layer3d, const fs::path &outPath,
+                              const concord::Datum &datum = concord::Datum{0.001, 0.001, 1.0}) {
+
         RasterCollection rc;
         rc.datum = datum;
         rc.shift = layer3d.shift();
@@ -431,25 +436,24 @@ namespace geotiv {
         for (size_t layerIdx = 0; layerIdx < layer3d.layers(); ++layerIdx) {
             // Extract 2D grid from 3D layer
             auto grid2d = layer3d.extract_grid(layerIdx);
-            
+
             // Get Z coordinate for this layer
             auto centerPoint = layer3d.get_point(0, 0, layerIdx);
             double zCoord = centerPoint.z;
-            
+
             // Convert to uint8_t if needed, preserve original shift but update Z coordinate
             concord::Pose layerShift = layer3d.shift();
             layerShift.point.z = zCoord; // Update Z to this layer's Z coordinate
-            concord::Grid<uint8_t> uint8Grid(grid2d.rows(), grid2d.cols(), 
-                                           grid2d.inradius(), true, layerShift);
-            
+            concord::Grid<uint8_t> uint8Grid(grid2d.rows(), grid2d.cols(), grid2d.inradius(), true, layerShift);
+
             // Copy data with type conversion
             for (size_t r = 0; r < grid2d.rows(); ++r) {
                 for (size_t c = 0; c < grid2d.cols(); ++c) {
-                    uint8Grid(r, c) = static_cast<uint8_t>(std::min(255.0, 
-                        std::max(0.0, static_cast<double>(grid2d(r, c)))));
+                    uint8Grid(r, c) =
+                        static_cast<uint8_t>(std::min(255.0, std::max(0.0, static_cast<double>(grid2d(r, c)))));
                 }
             }
-            
+
             // Create layer
             geotiv::Layer layer;
             layer.grid = std::move(uint8Grid);
@@ -458,25 +462,23 @@ namespace geotiv {
             layer.samplesPerPixel = 1;
             layer.planarConfig = 1;
             layer.datum = datum;
-            layer.shift = layer3d.shift(); // Use the original layer's shift
+            layer.shift = layer3d.shift();         // Use the original layer's shift
             layer.resolution = layer3d.inradius(); // Use the original layer's resolution
-            
+
             // Set layer description with both geospatial data AND layer-specific info
-            layer.imageDescription = "CRS WGS84 DATUM " + std::to_string(datum.lat) + " " +
-                                   std::to_string(datum.lon) + " " + std::to_string(datum.alt) + " SHIFT " +
-                                   std::to_string(layer3d.shift().point.x) + " " + 
-                                   std::to_string(layer3d.shift().point.y) + " " + 
-                                   std::to_string(layer3d.shift().point.z) + " " +
-                                   std::to_string(layer3d.shift().angle.yaw) + " " +
-                                   "LayerHeight=" + std::to_string(layer3d.layer_height()) + " " +
-                                   "Resolution=" + std::to_string(layer3d.inradius()) + " " +
-                                   "LayerCount=" + std::to_string(layer3d.layers()) + " " +
-                                   "LayerIndex=" + std::to_string(layerIdx) + " " +
-                                   "LayerZ=" + std::to_string(zCoord);
-            
+            layer.imageDescription =
+                "CRS WGS84 DATUM " + std::to_string(datum.lat) + " " + std::to_string(datum.lon) + " " +
+                std::to_string(datum.alt) + " SHIFT " + std::to_string(layer3d.shift().point.x) + " " +
+                std::to_string(layer3d.shift().point.y) + " " + std::to_string(layer3d.shift().point.z) + " " +
+                std::to_string(layer3d.shift().angle.yaw) + " " +
+                "LayerHeight=" + std::to_string(layer3d.layer_height()) + " " +
+                "Resolution=" + std::to_string(layer3d.inradius()) + " " +
+                "LayerCount=" + std::to_string(layer3d.layers()) + " " + "LayerIndex=" + std::to_string(layerIdx) +
+                " " + "LayerZ=" + std::to_string(zCoord);
+
             rc.layers.push_back(std::move(layer));
         }
-        
+
         // Write to file
         WriteRasterCollection(rc, outPath);
     }

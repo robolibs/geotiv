@@ -1,43 +1,77 @@
 SHELL := /bin/bash
 
-PROJECT_NAME := $(shell grep -Po 'set\s*\(\s*project_name\s+\K[^)]+' CMakeLists.txt)
+# Detect build system: use BUILD_SYSTEM env if set, else prefer xmake if available, fallback to cmake
+ifdef BUILD_SYSTEM
+    # Use the environment-provided BUILD_SYSTEM
+else
+    HAS_XMAKE := $(shell command -v xmake 2>/dev/null)
+    HAS_XMAKE_LUA := $(shell [ -f xmake.lua ] && echo "yes" || echo "")
+    ifeq ($(and $(HAS_XMAKE),$(HAS_XMAKE_LUA)),yes)
+        BUILD_SYSTEM := xmake
+    else
+        BUILD_SYSTEM := cmake
+    endif
+endif
+
+ifeq ($(BUILD_SYSTEM),xmake)
+    PROJECT_NAME := $(shell grep 'set_project' xmake.lua | sed 's/set_project("\(.*\)")/\1/')
+else
+    PROJECT_NAME := $(shell grep -Po 'set\s*\(\s*project_name\s+\K[^)]+' CMakeLists.txt)
+    ifeq ($(PROJECT_NAME),)
+        $(error Error: project_name not found in CMakeLists.txt)
+    endif
+endif
+
 PROJECT_CAP  := $(shell echo $(PROJECT_NAME) | tr '[:lower:]' '[:upper:]')
 LATEST_TAG   ?= $(shell git describe --tags --abbrev=0 2>/dev/null)
 TOP_DIR      := $(CURDIR)
 BUILD_DIR    := $(TOP_DIR)/build
 
-
-ifeq ($(PROJECT_NAME),)
-$(error Error: project_name not found in CMakeLists.txt)
-endif
-
 $(info ------------------------------------------)
 $(info Project: $(PROJECT_NAME))
+$(info Build System: $(BUILD_SYSTEM))
 $(info ------------------------------------------)
 
 .PHONY: build b config c reconfig run r test t help h clean docs release
 
 
 build:
+	@echo "Running clang-format on source files..."
+	@find ./src ./include -name "*.cpp" -o -name "*.hpp" -o -name "*.h" | xargs clang-format -i
+ifeq ($(BUILD_SYSTEM),xmake)
+	@xmake 2>&1 | tee >(grep "error:" > "$(TOP_DIR)/.quickfix")
+else
 	@if [ ! -d "$(BUILD_DIR)" ]; then \
 		echo "Build directory doesn't exist, running config first..."; \
 		$(MAKE) config; \
 	fi
 	@cd $(BUILD_DIR) && set -o pipefail && make -j$(shell nproc) 2>&1 | tee >(grep "^$(TOP_DIR)" | grep -E "error:" > "$(TOP_DIR)/.quickfix")
+endif
 
 b: build
 
 config:
+ifeq ($(BUILD_SYSTEM),xmake)
+	@xmake f --examples=y --tests=y -y
+	@xmake project -k compile_commands
+else
 	@mkdir -p $(BUILD_DIR)
 	@cd $(BUILD_DIR) && if [ -f Makefile ]; then make clean; fi
-	@echo "cmake -Wno-dev -D$(PROJECT_CAP)_BUILD_EXAMPLES=ON -D$(PROJECT_CAP)_ENABLE_TESTS=ON $(if $(LOCAL),-DUSE_LOCAL=ON) .."
-	@cd $(BUILD_DIR) && cmake -Wno-dev -D$(PROJECT_CAP)_BUILD_EXAMPLES=ON -D$(PROJECT_CAP)_ENABLE_TESTS=ON $(if $(LOCAL),-DUSE_LOCAL=ON) ..
+	@echo "cmake -Wno-dev -D$(PROJECT_CAP)_BUILD_EXAMPLES=ON -D$(PROJECT_CAP)_ENABLE_TESTS=ON .."
+	@cd $(BUILD_DIR) && cmake -Wno-dev -D$(PROJECT_CAP)_BUILD_EXAMPLES=ON -D$(PROJECT_CAP)_ENABLE_TESTS=ON ..
+endif
 
 reconfig:
+ifeq ($(BUILD_SYSTEM),xmake)
+	@rm -rf .xmake $(BUILD_DIR)
+	@xmake f --examples=y --tests=y -c -y
+	@xmake project -k compile_commands
+else
 	@rm -rf $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)
-	@echo "cmake -Wno-dev -D$(PROJECT_CAP)_BUILD_EXAMPLES=ON -D$(PROJECT_CAP)_ENABLE_TESTS=ON $(if $(LOCAL),-DUSE_LOCAL=ON) .."
-	@cd $(BUILD_DIR) && cmake -Wno-dev -D$(PROJECT_CAP)_BUILD_EXAMPLES=ON -D$(PROJECT_CAP)_ENABLE_TESTS=ON $(if $(LOCAL),-DUSE_LOCAL=ON) ..
+	@echo "cmake -Wno-dev -D$(PROJECT_CAP)_BUILD_EXAMPLES=ON -D$(PROJECT_CAP)_ENABLE_TESTS=ON .."
+	@cd $(BUILD_DIR) && cmake -Wno-dev -D$(PROJECT_CAP)_BUILD_EXAMPLES=ON -D$(PROJECT_CAP)_ENABLE_TESTS=ON ..
+endif
 
 c: config
 
@@ -47,7 +81,11 @@ run:
 r: run
 
 test:
+ifeq ($(BUILD_SYSTEM),xmake)
+	@xmake test
+else
 	@cd $(BUILD_DIR) && ctest --verbose --output-on-failure || true
+endif
 
 t: test
 
@@ -62,14 +100,18 @@ help:
 	@echo "  run          Run the main executable"
 	@echo "  test         Run tests"
 	@echo "  docs         Build documentation (TYPE=mdbook|doxygen)"
-	@echo "  release      Create a new release (TYPE=patch|minor|major|same)"
+	@echo "  release      Create a new release (TYPE=patch|minor|major)"
 	@echo
 
 h : help
 
 clean:
 	@echo "Cleaning build directory..."
+ifeq ($(BUILD_SYSTEM),xmake)
+	@xmake clean -a
+else
 	@rm -rf $(BUILD_DIR)
+endif
 	@echo "Build directory cleaned."
 
 docs:
@@ -86,7 +128,7 @@ endif
 
 release:
 	@if [ -z "$(TYPE)" ]; then \
-		echo "Release type not specified. Use 'make release TYPE=[patch|minor|major|same]'"; \
+		echo "Release type not specified. Use 'make release TYPE=[patch|minor|major]'"; \
 		exit 1; \
 	fi; \
 	CURRENT_VERSION=$$(grep -E '^project\(.*VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/'); \
@@ -95,15 +137,9 @@ release:
 		major) MAJOR=$$((MAJOR+1)); MINOR=0; PATCH=0 ;; \
 		minor) MINOR=$$((MINOR+1)); PATCH=0 ;; \
 		patch) PATCH=$$((PATCH+1)); ;; \
-		same) ;; \
-		*) echo "Invalid release type. Use patch, minor, major, or same."; exit 1 ;; \
+		*) echo "Invalid release type. Use patch, minor or major."; exit 1 ;; \
 	esac; \
 	version="$$MAJOR.$$MINOR.$$PATCH"; \
-	if [ "$(TYPE)" = "same" ]; then \
-		git tag -d $$version 2>/dev/null || true; \
-		git push origin :refs/tags/$$version 2>/dev/null || true; \
-		gh release delete $$version -y 2>/dev/null || true; \
-	fi; \
 	if [ -n "$(LATEST_TAG)" ]; then \
 		changelog=$$(git cliff $(LATEST_TAG)..HEAD --strip all); \
 		git cliff --tag $$version $(LATEST_TAG)..HEAD --prepend CHANGELOG.md; \
@@ -111,8 +147,9 @@ release:
 		changelog=$$(git cliff --unreleased --strip all); \
 		git cliff --tag $$version --unreleased --prepend CHANGELOG.md; \
 	fi; \
-	if [ "$(TYPE)" != "same" ]; then \
-		sed -i -E 's/(project\(.*VERSION )[0-9]+\.[0-9]+\.[0-9]+/\1'$$version'/' CMakeLists.txt; \
+	sed -i -E 's/(project\(.*VERSION )[0-9]+\.[0-9]+\.[0-9]+/\1'$$version'/' CMakeLists.txt; \
+	if [ -f xmake.lua ]; then \
+		sed -i -E 's/(set_version\(")[0-9]+\.[0-9]+\.[0-9]+/\1'$$version'/' xmake.lua; \
 	fi; \
 	git add -A && git commit -m "chore(release): prepare for $$version"; \
 	echo "$$changelog"; \
