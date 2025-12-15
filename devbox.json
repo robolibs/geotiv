@@ -10,20 +10,9 @@
     "stdenv@latest",
     "boost@latest",
     "boost.dev",
-    "arrow-cpp@latest",
-    "zeromq@latest",
-    "cppzmq@latest",
     "rerun@latest",
-    "tbb@latest",
-    "tbb.dev",
     "cli11@latest",
     "libsodium@latest",
-    "eigen@latest",
-    "rustc@latest",
-    "cargo@latest",
-    "rust-analyzer@latest",
-    "clippy@latest",
-    "vscode-extensions.llvm-org.lldb-vscode@latest"
   ],
   "shell": {
     "init_hook": [
