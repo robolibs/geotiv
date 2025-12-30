@@ -94,8 +94,8 @@ end
 target("geotiv")
     set_kind("static")
 
-    -- Add source files
-    add_files("src/*.cpp")
+    -- Add source files (header-only library with empty cpp for compilation)
+    add_files("src/geotiv/*.cpp")
 
     -- Add header files
     add_headerfiles("include/(geotiv/**.hpp)")

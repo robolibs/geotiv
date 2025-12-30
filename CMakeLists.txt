@@ -27,8 +27,8 @@ FetchContent_MakeAvailable(concord)
 list(APPEND ext_deps concord::concord)
 
 # --------------------------------------------------------------------------------------------------
-# Build library
-file(GLOB SOURCES CONFIGURE_DEPENDS src/*.cpp)
+# Build library (header-only library with empty cpp for compilation)
+file(GLOB SOURCES CONFIGURE_DEPENDS src/geotiv/*.cpp)
 
 add_library(${project_name} ${SOURCES})
 add_library(${project_name}::${project_name} ALIAS ${project_name})
