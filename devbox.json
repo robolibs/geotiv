@@ -2,17 +2,13 @@
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.14.1/.schema/devbox.schema.json",
   "packages": [
     "cmake@latest",
-    "pkgconfig@latest",
     "clang@latest",
     "clang-tools@latest",
-    "gcc@13.3",
-    "gcc.cc.lib",
     "stdenv@latest",
-    "boost@latest",
-    "boost.dev",
+    "arrow-cpp@latest",
     "rerun@latest",
-    "cli11@latest",
-    "libsodium@latest",
+    "zig@latest",
+    "xmake@latest"
   ],
   "shell": {
     "init_hook": [
