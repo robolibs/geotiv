@@ -8,7 +8,8 @@
     "arrow-cpp@latest",
     "rerun@latest",
     "zig@latest",
-    "xmake@latest"
+    "xmake@latest",
+    "gdal@latest"
   ],
   "shell": {
     "init_hook": [
