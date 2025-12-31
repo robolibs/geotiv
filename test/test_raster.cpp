@@ -5,8 +5,8 @@
 #include <filesystem>
 
 TEST_CASE("Raster - Basic Construction") {
-    concord::Datum datum{52.0, 5.0, 0.0};
-    concord::Euler heading{0, 0, 0.5};
+    dp::Geo datum{52.0, 5.0, 0.0};
+    auto rotation = dp::Quaternion::from_euler(0, 0, 0.5);
     double resolution = 2.0;
 
     SUBCASE("Constructor with default parameters") {
@@ -19,19 +19,20 @@ TEST_CASE("Raster - Basic Construction") {
     }
 
     SUBCASE("Constructor with all parameters") {
-        geotiv::Raster raster(datum, concord::Pose{concord::Point{0, 0, 0}, heading}, resolution);
+        geotiv::Raster raster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, resolution);
 
-        CHECK(raster.getDatum().lat == doctest::Approx(52.0));
-        CHECK(raster.getDatum().lon == doctest::Approx(5.0));
-        CHECK(raster.getShift().angle.yaw == doctest::Approx(0.5));
+        CHECK(raster.getDatum().latitude == doctest::Approx(52.0));
+        CHECK(raster.getDatum().longitude == doctest::Approx(5.0));
+        CHECK(raster.getShift().rotation.to_euler().yaw == doctest::Approx(0.5));
         // CRS is always WGS84
         CHECK(raster.getResolution() == doctest::Approx(2.0));
     }
 }
 
 TEST_CASE("Raster - Grid Management") {
-    concord::Datum datum{52.0, 5.0, 0.0};
-    geotiv::Raster raster(datum, concord::Pose{concord::Point{0, 0, 0}, concord::Euler{0, 0, 0}}, 1.0);
+    dp::Geo datum{52.0, 5.0, 0.0};
+    auto rotation = dp::Quaternion::from_euler(0, 0, 0);
+    geotiv::Raster raster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, 1.0);
 
     SUBCASE("Add and retrieve grids") {
         raster.addGrid(100, 100, "elevation", "terrain", {{"unit", "meters"}});
@@ -44,8 +45,8 @@ TEST_CASE("Raster - Grid Management") {
         CHECK(grid.type == "terrain");
         CHECK(grid.properties.at("unit") == "meters");
         CHECK(grid.properties.at("type") == "terrain");
-        CHECK(grid.grid.rows() == 100);
-        CHECK(grid.grid.cols() == 100);
+        CHECK(grid.grid.rows == 100);
+        CHECK(grid.grid.cols == 100);
     }
 
     SUBCASE("Add specialized grids") {
@@ -138,7 +139,7 @@ TEST_CASE("Raster - Grid Data Operations") {
         // Get world coordinate for a grid cell
         auto worldCoord = grid.grid.get_point(5, 5);
 
-        // World coordinates should be valid concord::Point
+        // World coordinates should be valid dp::Point
         bool hasValidCoords = (worldCoord.x != 0.0 || worldCoord.y != 0.0 || worldCoord.z == 0.0);
         CHECK(hasValidCoords);
     }
@@ -155,16 +156,16 @@ TEST_CASE("Raster - Properties and Metadata") {
     }
 
     SUBCASE("Datum and heading") {
-        concord::Datum newDatum{51.0, 4.0, 10.0};
-        concord::Euler newHeading{0.1, 0.2, 0.3};
+        dp::Geo newDatum{51.0, 4.0, 10.0};
+        auto newRotation = dp::Quaternion::from_euler(0.1, 0.2, 0.3);
 
         raster.setDatum(newDatum);
-        raster.setShift(concord::Pose{concord::Point{0, 0, 0}, newHeading});
+        raster.setShift(dp::Pose{dp::Point{0, 0, 0}, newRotation});
 
-        CHECK(raster.getDatum().lat == doctest::Approx(51.0));
-        CHECK(raster.getDatum().lon == doctest::Approx(4.0));
-        CHECK(raster.getDatum().alt == doctest::Approx(10.0));
-        CHECK(raster.getShift().angle.yaw == doctest::Approx(0.3));
+        CHECK(raster.getDatum().latitude == doctest::Approx(51.0));
+        CHECK(raster.getDatum().longitude == doctest::Approx(4.0));
+        CHECK(raster.getDatum().altitude == doctest::Approx(10.0));
+        CHECK(raster.getShift().rotation.to_euler().yaw == doctest::Approx(0.3));
     }
 
     SUBCASE("Resolution") {
@@ -174,8 +175,9 @@ TEST_CASE("Raster - Properties and Metadata") {
 }
 
 TEST_CASE("Raster - File I/O") {
-    concord::Datum datum{52.0, 5.0, 0.0};
-    geotiv::Raster originalRaster(datum, concord::Pose{concord::Point{0, 0, 0}, concord::Euler{0, 0, 0.5}}, 2.0);
+    dp::Geo datum{52.0, 5.0, 0.0};
+    auto rotation = dp::Quaternion::from_euler(0, 0, 0.5);
+    geotiv::Raster originalRaster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, 2.0);
 
     // Add some test grids
     originalRaster.addTerrainGrid(20, 20, "terrain");
@@ -210,8 +212,8 @@ TEST_CASE("Raster - File I/O") {
 
         // Note: File I/O may not preserve all metadata exactly,
         // but should preserve basic structure
-        CHECK(loadedRaster.getDatum().lat != 0.0); // Should have some datum
-        CHECK(loadedRaster.getResolution() > 0.0); // Should have positive resolution
+        CHECK(loadedRaster.getDatum().latitude != 0.0); // Should have some datum
+        CHECK(loadedRaster.getResolution() > 0.0);      // Should have positive resolution
 
         // Check grid names (may be different due to serialization format)
         auto gridNames = loadedRaster.getGridNames();
@@ -219,12 +221,12 @@ TEST_CASE("Raster - File I/O") {
 
         // Verify we can access grids by index
         const auto &grid0 = loadedRaster.getGrid(0);
-        CHECK(grid0.grid.rows() == 20);
-        CHECK(grid0.grid.cols() == 20);
+        CHECK(grid0.grid.rows == 20);
+        CHECK(grid0.grid.cols == 20);
 
         const auto &grid1 = loadedRaster.getGrid(1);
-        CHECK(grid1.grid.rows() == 20);
-        CHECK(grid1.grid.cols() == 20);
+        CHECK(grid1.grid.rows == 20);
+        CHECK(grid1.grid.cols == 20);
 
         // Cleanup
         std::filesystem::remove(testFile);
@@ -255,7 +257,7 @@ TEST_CASE("Raster - Iterators") {
         int count = 0;
         for (const auto &grid : raster) {
             CHECK(grid.name.starts_with("grid"));
-            CHECK(grid.grid.rows() >= 10);
+            CHECK(grid.grid.rows >= 10);
             count++;
         }
         CHECK(count == 3);

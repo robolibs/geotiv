@@ -1,5 +1,7 @@
-#include "concord/concord.hpp"
+#include <datapod/datapod.hpp>
+namespace dp = datapod;
 #include "geotiv/geotiv.hpp"
+#include <cmath>
 #include <doctest/doctest.h>
 #include <filesystem>
 
@@ -11,11 +13,12 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
         for (int i = 0; i < 3; ++i) {
             size_t rows = 10 + i * 5, cols = 15 + i * 5;
             double cellSize = 1.0 + i * 0.5;
-            concord::Datum datum{47.0 + i * 0.1, 8.0 + i * 0.1, 100.0 + i * 50};
-            concord::Euler heading{0, 0, i * 15.0}; // Different rotation per layer
-            concord::Pose shift{concord::Point{0, 0, 0}, heading};
+            dp::Geo datum{47.0 + i * 0.1, 8.0 + i * 0.1, 100.0 + i * 50};
+            double yaw_rad = i * 15.0 * M_PI / 180.0; // Different rotation per layer (in radians)
+            auto rotation = dp::Quaternion::from_euler(0, 0, yaw_rad);
+            dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
-            concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+            auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
             // Fill with layer-specific pattern
             for (size_t r = 0; r < rows; ++r) {
@@ -34,7 +37,7 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
             // Set different coordinate systems per layer
             // CRS is always WGS84
             layer.datum = datum;
-            layer.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+            layer.shift = shift;
             layer.resolution = cellSize;
             // Don't set custom imageDescription - let the writer generate the proper geospatial one
 
@@ -78,15 +81,16 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
             // CRS is always WGS84
 
             // Check datum (with some tolerance for floating point precision)
-            CHECK(layer.datum.lat == doctest::Approx(47.0 + i * 0.1).epsilon(0.001));
-            CHECK(layer.datum.lon == doctest::Approx(8.0 + i * 0.1).epsilon(0.001));
-            CHECK(layer.datum.alt == doctest::Approx(100.0 + i * 50).epsilon(0.1));
+            CHECK(layer.datum.latitude == doctest::Approx(47.0 + i * 0.1).epsilon(0.001));
+            CHECK(layer.datum.longitude == doctest::Approx(8.0 + i * 0.1).epsilon(0.001));
+            CHECK(layer.datum.altitude == doctest::Approx(100.0 + i * 50).epsilon(0.1));
 
             // Check resolution
             CHECK(layer.resolution == doctest::Approx(1.0 + i * 0.5).epsilon(0.001));
 
-            // Check heading
-            CHECK(layer.shift.angle.yaw == doctest::Approx(i * 15.0).epsilon(0.1));
+            // Check heading (in radians)
+            double expected_yaw_rad = i * 15.0 * M_PI / 180.0;
+            CHECK(layer.shift.rotation.to_euler().yaw == doctest::Approx(expected_yaw_rad).epsilon(0.01));
 
             // Check custom tags were preserved
             auto it = layer.customTags.find(50000 + i);
@@ -98,8 +102,8 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
 
             // Verify grid data integrity
             const auto &grid = layer.grid;
-            CHECK(grid.rows() == (10 + i * 5));
-            CHECK(grid.cols() == (15 + i * 5));
+            CHECK(grid.rows == (10 + i * 5));
+            CHECK(grid.cols == (15 + i * 5));
 
             // Check some pixel values
             uint8_t expectedFirst = static_cast<uint8_t>((i * 50) % 256);
@@ -118,11 +122,12 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
 
         for (size_t t = 0; t < timestamps.size(); ++t) {
             size_t rows = 20, cols = 30;
-            double cellSize = 0.5;                                 // 50cm resolution
-            concord::Datum surveyLocation{46.5204, 6.6234, 372.0}; // Geneva coordinates
-            concord::Pose shift{concord::Point{0, 0, 0}, concord::Euler{0, 0, 0}};
+            double cellSize = 0.5;                          // 50cm resolution
+            dp::Geo surveyLocation{46.5204, 6.6234, 372.0}; // Geneva coordinates
+            auto rotation = dp::Quaternion::from_euler(0, 0, 0);
+            dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
-            concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+            auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
             // Fill with time-dependent pattern
             for (size_t r = 0; r < rows; ++r) {
@@ -139,7 +144,7 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
             layer.planarConfig = 1;
             // CRS is always WGS84
             layer.datum = surveyLocation;
-            layer.shift = concord::Pose{concord::Point{0, 0, 0}, concord::Euler{0, 0, 0}};
+            layer.shift = shift;
             layer.resolution = cellSize;
             layer.imageDescription = "Time-series data point " + std::to_string(t);
 

@@ -1,4 +1,5 @@
-#include "concord/concord.hpp"
+#include <datapod/datapod.hpp>
+namespace dp = datapod;
 #include "geotiv/geotiv.hpp"
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -9,11 +10,11 @@ TEST_CASE("GeoTIFF Writer functionality") {
         // Create a simple 3x2 grid with checkerboard pattern
         size_t rows = 2, cols = 3;
         double cellSize = 1.0;
-        concord::Datum datum{0.0, 0.0, 0.0};
-        concord::Euler heading{0, 0, 0};
-        concord::Pose shift{concord::Point{0, 0, 0}, heading};
+        dp::Geo datum{0.0, 0.0, 0.0};
+        auto rotation = dp::Quaternion::from_euler(0, 0, 0);
+        dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
-        concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+        auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
         // Fill with simple pattern
         grid(0, 0) = 255;
@@ -27,7 +28,7 @@ TEST_CASE("GeoTIFF Writer functionality") {
         geotiv::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
-        rc.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        rc.shift = shift;
         rc.resolution = cellSize;
 
         geotiv::Layer layer;
@@ -39,7 +40,7 @@ TEST_CASE("GeoTIFF Writer functionality") {
         // Set per-layer metadata
         // CRS is always WGS84
         layer.datum = datum;
-        layer.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        layer.shift = shift;
         layer.resolution = cellSize;
 
         rc.layers.push_back(std::move(layer));
@@ -61,11 +62,11 @@ TEST_CASE("GeoTIFF Writer functionality") {
         // Create a simple raster collection
         size_t rows = 5, cols = 5;
         double cellSize = 1.0;
-        concord::Datum datum{0.0, 0.0, 0.0};
-        concord::Euler heading{0, 0, 0};
-        concord::Pose shift{concord::Point{0, 0, 0}, heading};
+        dp::Geo datum{0.0, 0.0, 0.0};
+        auto rotation = dp::Quaternion::from_euler(0, 0, 0);
+        dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
-        concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+        auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
         // Fill with gradient
         for (size_t r = 0; r < rows; ++r) {
@@ -77,7 +78,7 @@ TEST_CASE("GeoTIFF Writer functionality") {
         geotiv::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
-        rc.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        rc.shift = shift;
         rc.resolution = cellSize;
 
         geotiv::Layer layer;
@@ -89,7 +90,7 @@ TEST_CASE("GeoTIFF Writer functionality") {
         // Set per-layer metadata
         // CRS is always WGS84
         layer.datum = datum;
-        layer.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        layer.shift = shift;
         layer.resolution = cellSize;
 
         rc.layers.push_back(std::move(layer));
@@ -109,19 +110,19 @@ TEST_CASE("GeoTIFF Writer functionality") {
     SUBCASE("Multi-layer GeoTIFF") {
         size_t rows = 3, cols = 3;
         double cellSize = 2.0;
-        concord::Datum datum{45.0, 9.0, 100.0};
-        concord::Euler heading{0, 0, 0};
-        concord::Pose shift{concord::Point{0, 0, 0}, heading};
+        dp::Geo datum{45.0, 9.0, 100.0};
+        auto rotation = dp::Quaternion::from_euler(0, 0, 0);
+        dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
         geotiv::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
-        rc.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        rc.shift = shift;
         rc.resolution = cellSize;
 
         // Create two layers with different patterns
         for (int layerIdx = 0; layerIdx < 2; ++layerIdx) {
-            concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+            auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
             for (size_t r = 0; r < rows; ++r) {
                 for (size_t c = 0; c < cols; ++c) {
@@ -137,8 +138,9 @@ TEST_CASE("GeoTIFF Writer functionality") {
             layer.planarConfig = 1;
             // Set per-layer metadata - different for each layer
             // CRS is always WGS84
-            layer.datum = {datum.lat + layerIdx * 0.01, datum.lon + layerIdx * 0.01, datum.alt + layerIdx * 10};
-            layer.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+            layer.datum = {datum.latitude + layerIdx * 0.01, datum.longitude + layerIdx * 0.01,
+                           datum.altitude + layerIdx * 10};
+            layer.shift = shift;
             layer.resolution = cellSize + layerIdx * 0.1;
 
             rc.layers.push_back(std::move(layer));

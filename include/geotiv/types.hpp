@@ -7,7 +7,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "concord/concord.hpp"
+#include <datapod/datapod.hpp>
+
+namespace dp = datapod;
 
 namespace geotiv {
 
@@ -61,14 +63,14 @@ namespace geotiv {
         std::vector<uint32_t> stripOffsets;
         std::vector<uint32_t> stripByteCounts;
 
-        concord::Datum datum;
-        concord::Pose shift;
+        dp::Geo datum;
+        dp::Pose shift;
         double resolution = 1.0;
 
         std::string imageDescription;
         std::map<uint16_t, std::vector<uint32_t>> customTags;
 
-        concord::Grid<uint8_t> grid;
+        dp::Grid<uint8_t> grid;
 
         inline void setGlobalProperty(const std::string &key, const std::string &value) {
             std::hash<std::string> hasher;
@@ -96,8 +98,8 @@ namespace geotiv {
     struct RasterCollection {
         std::vector<Layer> layers;
 
-        concord::Datum datum;
-        concord::Pose shift;
+        dp::Geo datum;
+        dp::Pose shift;
         double resolution;
 
         inline std::unordered_map<std::string, std::string> getGlobalPropertiesFromFirstLayer() const {

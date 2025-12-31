@@ -2,19 +2,22 @@
 
 #include <iostream>
 
-#include "concord/concord.hpp" // Datum, Euler
-#include "geotiv/geotiv.hpp"   // RasterCollection, Layer
+#include "geotiv/geotiv.hpp"
+#include <concord/concord.hpp>
+#include <datapod/datapod.hpp>
+
+namespace dp = datapod;
+namespace cc = concord;
 
 int main() {
     try {
         // --- 1) Create your Grid<uint8_t> (e.g. a 100×50 checkerboard) ---
         size_t rows = 50, cols = 100;
-        double cellSize = 2.0;                                 // meters per pixel
-        concord::Datum datum{48.0, 11.0, 500.0};               // lat, lon, alt
-        concord::Euler heading{0, 0, 0};                       // no rotation
-        concord::Pose shift{concord::Point{0, 0, 0}, heading}; // center grid at datum
-        concord::Grid<uint8_t> grid(rows, cols, cellSize, 
-                                    /*centered=*/true, shift);
+        double cellSize = 2.0;                               // meters per pixel
+        dp::Geo datum{48.0, 11.0, 500.0};                    // lat, lon, alt
+        auto rotation = dp::Quaternion::from_euler(0, 0, 0); // no rotation
+        dp::Pose shift{dp::Point{0, 0, 0}, rotation};        // center grid at datum
+        auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
         for (size_t r = 0; r < rows; ++r)
             for (size_t c = 0; c < cols; ++c)
                 grid(r, c) = ((r / 5 + c / 5) % 2) ? 255 : 0;
@@ -23,7 +26,7 @@ int main() {
         geotiv::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
-        rc.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        rc.shift = shift;
         rc.resolution = cellSize;
 
         geotiv::Layer L;
@@ -35,7 +38,7 @@ int main() {
         // Set per-layer metadata
         // CRS is always WGS84
         L.datum = datum;
-        L.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        L.shift = shift;
         L.resolution = cellSize;
 
         rc.layers.clear();
@@ -43,7 +46,7 @@ int main() {
 
         // --- 3) Write out the GeoTIFF in one call ---
         geotiv::WriteRasterCollection(rc, "output.tif");
-        std::cout << "Wrote GeoTIFF " << cols << "×" << rows << " at " << cellSize << "m/px → output.tif\n";
+        std::cout << "Wrote GeoTIFF " << cols << "x" << rows << " at " << cellSize << "m/px -> output.tif\n";
     } catch (std::exception &e) {
         std::cerr << "ERROR: " << e.what() << "\n";
         return 1;

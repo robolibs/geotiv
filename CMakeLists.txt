@@ -5,6 +5,16 @@ set(project_name geotiv)
 project(${project_name} VERSION 3.1.0 LANGUAGES CXX)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
+
+# Architecture-specific SIMD flags (required by optinum dependency)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-6]86")
+    add_compile_options(-mavx -mavx2 -mfma -msse4.1)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+    # ARM64: NEON is enabled by default
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+    add_compile_options(-mfpu=neon -mfloat-abi=hard)
+endif()
+
 cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0135 NEW)
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
@@ -21,10 +31,21 @@ option(${project_name_upper}_ENABLE_TESTS "Enable tests" OFF)
 include(FetchContent)
 
 # --------------------------------------------------------------------------------------------------
+# Dependencies from local xtra/ folder
 set(ext_deps)
-FetchContent_Declare(concord GIT_REPOSITORY https://github.com/smolfetch/concord.git GIT_TAG 2.5.0)
+
+# Use FetchContent to declare local paths - this prevents xtra libs from re-fetching
+FetchContent_Declare(datapod SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/xtra/datapod)
+FetchContent_Declare(optinum SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/xtra/optinum)
+FetchContent_Declare(graphix SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/xtra/graphix)
+FetchContent_Declare(concord SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/xtra/concord)
+
+# Make them available (order matters: datapod first, then optinum, then concord)
+FetchContent_MakeAvailable(datapod)
+FetchContent_MakeAvailable(optinum)
 FetchContent_MakeAvailable(concord)
-list(APPEND ext_deps concord::concord)
+
+list(APPEND ext_deps datapod::datapod optinum::optinum concord::concord)
 
 # --------------------------------------------------------------------------------------------------
 # Build library (header-only library with empty cpp for compilation)
@@ -41,8 +62,8 @@ target_include_directories(${project_name}
 
 target_link_libraries(${project_name} PRIVATE ${ext_deps})
 
-# Export concord as a public dependency (headers use it)
-target_link_libraries(${project_name} PUBLIC concord::concord)
+# Export dependencies as public (headers use them)
+target_link_libraries(${project_name} PUBLIC datapod::datapod optinum::optinum concord::concord)
 
 target_compile_options(${project_name} PRIVATE ${params})
 

@@ -1,4 +1,5 @@
-#include "concord/concord.hpp"
+#include <datapod/datapod.hpp>
+namespace dp = datapod;
 #include "geotiv/geotiv.hpp"
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -10,11 +11,11 @@ TEST_CASE("GeoTIFF Parser functionality") {
         // Create a test raster collection
         size_t rows = 4, cols = 6;
         double cellSize = 1.5;
-        concord::Datum datum{47.5, 8.5, 200.0};
-        concord::Euler heading{0, 0, 30};
-        concord::Pose shift{concord::Point{0, 0, 0}, heading};
+        dp::Geo datum{47.5, 8.5, 200.0};
+        auto rotation = dp::Quaternion::from_euler(0, 0, 30);
+        dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
-        concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+        auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
         // Fill with a known pattern
         for (size_t r = 0; r < rows; ++r) {
@@ -27,7 +28,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
         geotiv::RasterCollection originalRc;
         // CRS is always WGS84
         originalRc.datum = datum;
-        originalRc.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        originalRc.shift = shift;
         originalRc.resolution = cellSize;
 
         geotiv::Layer layer;
@@ -39,7 +40,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
         // Set per-layer metadata
         // CRS is always WGS84
         layer.datum = datum;
-        layer.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        layer.shift = shift;
         layer.resolution = cellSize;
 
         originalRc.layers.push_back(std::move(layer));
@@ -72,19 +73,19 @@ TEST_CASE("GeoTIFF Parser functionality") {
         // Check both collection-level and layer-level metadata
         // CRS is always WGS84
         // CRS is always WGS84
-        CHECK(readRc.datum.lat == doctest::Approx(datum.lat).epsilon(0.001));
-        CHECK(readRc.layers[0].datum.lat == doctest::Approx(datum.lat).epsilon(0.001));
-        CHECK(readRc.datum.lon == doctest::Approx(datum.lon).epsilon(0.001));
-        CHECK(readRc.layers[0].datum.lon == doctest::Approx(datum.lon).epsilon(0.001));
-        CHECK(readRc.datum.alt == doctest::Approx(datum.alt).epsilon(0.1));
-        CHECK(readRc.layers[0].datum.alt == doctest::Approx(datum.alt).epsilon(0.1));
+        CHECK(readRc.datum.latitude == doctest::Approx(datum.latitude).epsilon(0.001));
+        CHECK(readRc.layers[0].datum.latitude == doctest::Approx(datum.latitude).epsilon(0.001));
+        CHECK(readRc.datum.longitude == doctest::Approx(datum.longitude).epsilon(0.001));
+        CHECK(readRc.layers[0].datum.longitude == doctest::Approx(datum.longitude).epsilon(0.001));
+        CHECK(readRc.datum.altitude == doctest::Approx(datum.altitude).epsilon(0.1));
+        CHECK(readRc.layers[0].datum.altitude == doctest::Approx(datum.altitude).epsilon(0.1));
         CHECK(readRc.resolution == doctest::Approx(cellSize).epsilon(0.001));
         CHECK(readRc.layers[0].resolution == doctest::Approx(cellSize).epsilon(0.001));
 
         // Verify grid dimensions
         const auto &readGrid = readRc.layers[0].grid;
-        CHECK(readGrid.rows() == rows);
-        CHECK(readGrid.cols() == cols);
+        CHECK(readGrid.rows == rows);
+        CHECK(readGrid.cols == cols);
 
         // Verify some pixel values (note: might have precision differences)
         CHECK(readGrid(0, 0) == 0); // (0+0) % 256 = 0
@@ -114,25 +115,24 @@ TEST_CASE("GeoTIFF Parser functionality") {
 
     SUBCASE("Multi-layer round-trip test") {
         // Skip this test for now to focus on single-layer functionality
-        // TODO: Enable once single-layer parsing is working
         return;
 
         // Create a multi-layer raster collection
         size_t rows = 2, cols = 3;
         double cellSize = 0.5;
-        concord::Datum datum{51.5, -0.1, 50.0};
-        concord::Euler heading{0, 0, 0};
-        concord::Pose shift{concord::Point{0, 0, 0}, heading};
+        dp::Geo datum{51.5, -0.1, 50.0};
+        auto rotation = dp::Quaternion::from_euler(0, 0, 0);
+        dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
         geotiv::RasterCollection originalRc;
         // CRS is always WGS84
         originalRc.datum = datum;
-        originalRc.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        originalRc.shift = shift;
         originalRc.resolution = cellSize;
 
         // Create 3 layers
         for (int layerIdx = 0; layerIdx < 3; ++layerIdx) {
-            concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+            auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
             for (size_t r = 0; r < rows; ++r) {
                 for (size_t c = 0; c < cols; ++c) {
@@ -179,11 +179,11 @@ TEST_CASE("GeoTIFF Parser functionality") {
         // Test basic TIFF file structure validation
         size_t rows = 3, cols = 3;
         double cellSize = 2.0;
-        concord::Datum datum{47.5, 8.5, 200.0};
-        concord::Euler heading{0, 0, 0};
-        concord::Pose shift{concord::Point{0, 0, 0}, heading};
+        dp::Geo datum{47.5, 8.5, 200.0};
+        auto rotation = dp::Quaternion::from_euler(0, 0, 0);
+        dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
-        concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+        auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
         // Fill with known values
         for (size_t r = 0; r < rows; ++r) {
@@ -195,7 +195,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
         geotiv::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
-        rc.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        rc.shift = shift;
         rc.resolution = cellSize;
 
         geotiv::Layer layer;

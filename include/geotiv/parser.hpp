@@ -11,8 +11,12 @@
 #include <string>
 #include <vector>
 
-#include "concord/concord.hpp"
 #include "geotiv/types.hpp"
+#include <concord/concord.hpp>
+#include <datapod/datapod.hpp>
+
+namespace dp = datapod;
+namespace cc = concord;
 
 namespace geotiv {
 
@@ -262,9 +266,9 @@ namespace geotiv {
             }
 
             // Parse geotags for each IFD independently (always WGS84)
-            concord::Datum layerDatum; // Will be set from ImageDescription or use a valid default
-            concord::Pose layerShift{concord::Point{0, 0, 0}, concord::Euler{0, 0, 0}}; // default
-            double layerResolution = 1.0;                                               // default
+            dp::Geo layerDatum;           // Will be set from ImageDescription or use a valid default
+            dp::Pose layerShift{};        // default (identity quaternion)
+            double layerResolution = 1.0; // default
             std::string layerDescription;
             bool datumFromDescription = false;
 
@@ -282,13 +286,13 @@ namespace geotiv {
                             // All CRS are WGS84 - ignore the parsed value
                         }
                     } else if (tok == "DATUM") {
-                        if (ss >> layerDatum.lat >> layerDatum.lon >> layerDatum.alt) {
+                        if (ss >> layerDatum.latitude >> layerDatum.longitude >> layerDatum.altitude) {
                             datumFromDescription = true;
                         }
                     } else if (tok == "SHIFT") {
                         double x, y, z, yaw;
                         if (ss >> x >> y >> z >> yaw) {
-                            layerShift = concord::Pose{concord::Point{x, y, z}, concord::Euler{0, 0, yaw}};
+                            layerShift = dp::Pose{dp::Point{x, y, z}, dp::Quaternion::from_euler(0, 0, yaw)};
                         }
                     }
                 }
@@ -296,7 +300,7 @@ namespace geotiv {
 
             // If we didn't get a valid datum from ImageDescription, use a default that passes is_set()
             if (!datumFromDescription) {
-                layerDatum = {0.001, 0.001, 1.0}; // Valid minimal coordinates
+                layerDatum = dp::Geo{0.001, 0.001, 1.0}; // Valid minimal coordinates
             }
 
             // ModelPixelScale → resolution for this IFD
@@ -307,14 +311,15 @@ namespace geotiv {
                 // scales[1] is Y scale (negative for standard GeoTIFF), but we use X scale for resolution
 
                 // Use precise concord conversion: create two WGS points and convert to ENU to get distance
-                concord::WGS center_wgs{layerDatum.lat, layerDatum.lon, layerDatum.alt};
-                concord::WGS east_point_wgs{layerDatum.lat, layerDatum.lon + resolution_deg_lon, layerDatum.alt};
+                cc::earth::WGS center_wgs{layerDatum.latitude, layerDatum.longitude, layerDatum.altitude};
+                cc::earth::WGS east_point_wgs{layerDatum.latitude, layerDatum.longitude + resolution_deg_lon,
+                                              layerDatum.altitude};
 
-                concord::ENU center_enu = center_wgs.toENU(layerDatum);
-                concord::ENU east_point_enu = east_point_wgs.toENU(layerDatum);
+                cc::frame::ENU center_enu = cc::frame::to_enu(layerDatum, center_wgs);
+                cc::frame::ENU east_point_enu = cc::frame::to_enu(layerDatum, east_point_wgs);
 
                 // Calculate precise meter distance (use absolute value since Y scale is negative)
-                layerResolution = east_point_enu.x - center_enu.x;
+                layerResolution = east_point_enu.x() - center_enu.x();
                 // Could also verify with Y direction: abs(north_point_enu.y - center_enu.y)
             }
 
@@ -349,14 +354,16 @@ namespace geotiv {
             }
 
             // Use the shift directly - it's already in ENU space
-            concord::Pose shift = L.shift;
+            dp::Pose shift = L.shift;
 
-            concord::Grid<uint8_t> grid(
+            // Create grid using factory function
+            auto grid = dp::make_grid<uint8_t>(
                 /*rows=*/L.height,
                 /*cols=*/L.width,
-                /*diameter=*/L.resolution,
+                /*resolution=*/L.resolution,
                 /*centered=*/true,
-                /*shift=*/shift);
+                /*pose=*/shift,
+                /*default_value=*/uint8_t{0});
 
             // Fill grid with pixel data
             if (L.planarConfig == 1) { // Chunky format
@@ -394,9 +401,9 @@ namespace geotiv {
     inline std::ostream &operator<<(std::ostream &os, RasterCollection const &rc) {
         os << "GeoTIFF RasterCollection\n"
            << " CRS:        WGS84\n"
-           << " DATUM:      " << rc.datum.lat << ", " << rc.datum.lon << ", " << rc.datum.alt << "\n"
+           << " DATUM:      " << rc.datum.latitude << ", " << rc.datum.longitude << ", " << rc.datum.altitude << "\n"
            << " SHIFT:      " << rc.shift.point.x << ", " << rc.shift.point.y << ", " << rc.shift.point.z
-           << " (yaw=" << rc.shift.angle.yaw << ")\n"
+           << " (yaw=" << rc.shift.rotation.to_euler().yaw << ")\n"
            << " RESOLUTION: " << rc.resolution << " (map units per pixel)\n"
            << " Layers:     " << rc.layers.size() << "\n";
         for (auto const &L : rc.layers) {

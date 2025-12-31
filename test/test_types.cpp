@@ -1,5 +1,7 @@
-#include "concord/concord.hpp"
+#include <datapod/datapod.hpp>
+namespace dp = datapod;
 #include "geotiv/geotiv.hpp"
+#include <cmath>
 #include <doctest/doctest.h>
 
 TEST_CASE("Layer structure tests") {
@@ -33,26 +35,28 @@ TEST_CASE("RasterCollection structure tests") {
         geotiv::RasterCollection rc;
         CHECK(rc.layers.empty());
         // CRS is always WGS84 by default
-        CHECK(rc.datum.lat == 0.0);
-        CHECK(rc.datum.lon == 0.0);
-        CHECK(rc.datum.alt == 0.0);
-        CHECK(rc.shift.angle.roll == 0.0);
-        CHECK(rc.shift.angle.pitch == 0.0);
-        CHECK(rc.shift.angle.yaw == 0.0);
+        CHECK(rc.datum.latitude == 0.0);
+        CHECK(rc.datum.longitude == 0.0);
+        CHECK(rc.datum.altitude == 0.0);
+        CHECK(rc.shift.rotation.to_euler().roll == 0.0);
+        CHECK(rc.shift.rotation.to_euler().pitch == 0.0);
+        CHECK(rc.shift.rotation.to_euler().yaw == 0.0);
     }
 
     SUBCASE("RasterCollection with custom values") {
         geotiv::RasterCollection rc;
         // CRS is always WGS84
-        rc.datum = concord::Datum{48.0, 11.0, 500.0};
-        rc.shift = concord::Pose{concord::Point{0, 0, 0}, concord::Euler{0, 0, 45}};
+        rc.datum = dp::Geo{48.0, 11.0, 500.0};
+        double yaw_rad = 45.0 * M_PI / 180.0; // Convert degrees to radians
+        auto rotation = dp::Quaternion::from_euler(0, 0, yaw_rad);
+        rc.shift = dp::Pose{dp::Point{0, 0, 0}, rotation};
         rc.resolution = 2.0;
 
         // CRS is always WGS84
-        CHECK(rc.datum.lat == 48.0);
-        CHECK(rc.datum.lon == 11.0);
-        CHECK(rc.datum.alt == 500.0);
-        CHECK(rc.shift.angle.yaw == 45.0);
+        CHECK(rc.datum.latitude == 48.0);
+        CHECK(rc.datum.longitude == 11.0);
+        CHECK(rc.datum.altitude == 500.0);
+        CHECK(rc.shift.rotation.to_euler().yaw == doctest::Approx(yaw_rad).epsilon(0.001));
         CHECK(rc.resolution == 2.0);
     }
 

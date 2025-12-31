@@ -14,14 +14,13 @@
 namespace geotiv {
 
     struct GridLayer {
-        concord::Grid<uint8_t> grid;
+        dp::Grid<uint8_t> grid;
         std::string name;
         std::string type;
         std::unordered_map<std::string, std::string> properties;
         std::map<uint16_t, std::vector<uint32_t>> customTags;
 
-        inline GridLayer(const concord::Grid<uint8_t> &g, const std::string &layer_name,
-                         const std::string &layer_type = "",
+        inline GridLayer(const dp::Grid<uint8_t> &g, const std::string &layer_name, const std::string &layer_type = "",
                          const std::unordered_map<std::string, std::string> &props = {})
             : grid(g), name(layer_name), type(layer_type), properties(props) {}
 
@@ -51,13 +50,12 @@ namespace geotiv {
     class Raster {
       private:
         std::vector<GridLayer> grid_layers_;
-        concord::Datum datum_;
-        concord::Pose shift_;
+        dp::Geo datum_;
+        dp::Pose shift_;
         double resolution_;
 
       public:
-        inline Raster(const concord::Datum &datum = concord::Datum{0.001, 0.001, 1.0},
-                      const concord::Pose &shift = concord::Pose{concord::Point{0, 0, 0}, concord::Euler{0, 0, 0}},
+        inline Raster(const dp::Geo &datum = dp::Geo{0.001, 0.001, 1.0}, const dp::Pose &shift = dp::Pose{},
                       double resolution = 1.0)
             : datum_(datum), shift_(shift), resolution_(resolution) {}
 
@@ -111,9 +109,9 @@ namespace geotiv {
             for (const auto &gridLayer : grid_layers_) {
                 Layer layer;
                 layer.grid = gridLayer.grid;
-                layer.width = static_cast<uint32_t>(gridLayer.grid.cols());
-                layer.height = static_cast<uint32_t>(gridLayer.grid.rows());
-                layer.resolution = gridLayer.grid.inradius();
+                layer.width = static_cast<uint32_t>(gridLayer.grid.cols);
+                layer.height = static_cast<uint32_t>(gridLayer.grid.rows);
+                layer.resolution = gridLayer.grid.resolution;
                 layer.datum = datum_;
                 layer.shift = shift_;
                 layer.samplesPerPixel = 1;
@@ -165,7 +163,7 @@ namespace geotiv {
 
         inline void addGrid(uint32_t width, uint32_t height, const std::string &name, const std::string &type = "",
                             const std::unordered_map<std::string, std::string> &properties = {}) {
-            concord::Grid<uint8_t> grid(height, width, resolution_, true, shift_);
+            auto grid = dp::make_grid<uint8_t>(height, width, resolution_, true, shift_, uint8_t{0});
             auto props = properties;
             if (!type.empty()) {
                 props["type"] = type;
@@ -227,11 +225,11 @@ namespace geotiv {
             return names;
         }
 
-        inline const concord::Datum &getDatum() const { return datum_; }
-        inline void setDatum(const concord::Datum &datum) { datum_ = datum; }
+        inline const dp::Geo &getDatum() const { return datum_; }
+        inline void setDatum(const dp::Geo &datum) { datum_ = datum; }
 
-        inline const concord::Pose &getShift() const { return shift_; }
-        inline void setShift(const concord::Pose &shift) { shift_ = shift; }
+        inline const dp::Pose &getShift() const { return shift_; }
+        inline void setShift(const dp::Pose &shift) { shift_ = shift; }
 
         inline double getResolution() const { return resolution_; }
         inline void setResolution(double resolution) { resolution_ = resolution; }
@@ -272,7 +270,7 @@ namespace geotiv {
         auto cend() const { return grid_layers_.cend(); }
     };
 
-    template <typename T = uint8_t> concord::Layer<T> ReadLayerCollection(const std::filesystem::path &path) {
+    template <typename T = uint8_t> dp::Layer<T> ReadLayerCollection(const std::filesystem::path &path) {
         auto rc = ReadRasterCollection(path);
 
         if (rc.layers.empty()) {
@@ -280,7 +278,7 @@ namespace geotiv {
         }
 
         double resolution = rc.resolution;
-        concord::Pose shift = rc.shift;
+        dp::Pose shift = rc.shift;
 
         double layerHeight = 1.0;
         const auto &firstLayer = rc.layers[0];
@@ -302,9 +300,8 @@ namespace geotiv {
         size_t cols = firstLayer.width;
         size_t layerCount = rc.layers.size();
 
-        concord::Pose correctShift = shift;
-
-        concord::Layer<T> layer3d(rows, cols, layerCount, resolution, layerHeight, true, correctShift, false, false);
+        // Create layer using factory function
+        auto layer3d = dp::make_layer<T>(rows, cols, layerCount, resolution, layerHeight, true, shift, T{});
 
         for (size_t layerIdx = 0; layerIdx < layerCount; ++layerIdx) {
             const auto &ifdLayer = rc.layers[layerIdx];

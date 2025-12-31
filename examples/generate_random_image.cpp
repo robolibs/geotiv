@@ -5,8 +5,12 @@
 #include <iostream>
 #include <random>
 
-#include "concord/concord.hpp"
 #include "geotiv/geotiv.hpp"
+#include <concord/concord.hpp>
+#include <datapod/datapod.hpp>
+
+namespace dp = datapod;
+namespace cc = concord;
 
 int main() {
     try {
@@ -17,12 +21,12 @@ int main() {
         double cellSize = 1.0; // 1 meter per pixel
 
         // Use a real-world location (somewhere in Switzerland)
-        concord::Datum datum{46.8182, 8.2275, 1000.0}; // lat, lon, alt
-        concord::Euler heading{0, 0, 0};               // no rotation
-        concord::Pose shift{concord::Point{0, 0, 0}, heading};
+        dp::Geo datum{46.8182, 8.2275, 1000.0};              // lat, lon, alt
+        auto rotation = dp::Quaternion::from_euler(0, 0, 0); // no rotation
+        dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
         // Create the grid
-        concord::Grid<uint8_t> grid(rows, cols, cellSize, true, shift);
+        auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{0});
 
         // Initialize random number generator
         auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -42,7 +46,7 @@ int main() {
         geotiv::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
-        rc.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        rc.shift = shift;
         rc.resolution = cellSize;
 
         // Create layer with the same metadata
@@ -56,7 +60,7 @@ int main() {
         // Set per-layer geospatial metadata
         // CRS is always WGS84
         layer.datum = datum;
-        layer.shift = concord::Pose{concord::Point{0, 0, 0}, heading};
+        layer.shift = shift;
         layer.resolution = cellSize;
 
         rc.layers.push_back(std::move(layer));
@@ -65,7 +69,7 @@ int main() {
         std::string filename = "random_640x640.tif";
         geotiv::WriteRasterCollection(rc, filename);
 
-        std::cout << "✅ Successfully created: " << filename << "\n";
+        std::cout << "Successfully created: " << filename << "\n";
         std::cout << "   Size: 640x640 pixels\n";
         std::cout << "   Type: 8-bit grayscale\n";
         std::cout << "   Format: GeoTIFF with WGS84 coordinates\n";
@@ -76,7 +80,7 @@ int main() {
         std::cout << "   - Or any other TIFF-compatible viewer\n";
 
     } catch (const std::exception &e) {
-        std::cerr << "❌ Error: " << e.what() << "\n";
+        std::cerr << "Error: " << e.what() << "\n";
         return 1;
     }
 
