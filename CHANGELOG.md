@@ -13,6 +13,27 @@
 
 ### <!-- 7 -->⚙️ Miscellaneous Tasks
 
+- Update dependencies and project version
+- Clean up devbox and doctest configurations
+
+### Build
+
+- Add gdal to devbox environment
+- Update Devbox packages and environment variables
+
+## [0.0.2] - 2025-12-31
+
+### <!-- 0 -->⛰️  Features
+
+- Introduce comprehensive build system and dependency management
+- Convert geotiv to a header-only library
+
+### <!-- 2 -->🚜 Refactor
+
+- Migrate to new concord ecosystem (datapod, optinum, concord)
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
 - Clean up devbox and doctest configurations
 
 ### Build
