@@ -101,11 +101,12 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
             }
 
             // Verify grid data integrity
-            const auto &grid = layer.grid;
-            CHECK(grid.rows == (10 + i * 5));
-            CHECK(grid.cols == (15 + i * 5));
+            auto [gridRows, gridCols] = geotiv::get_grid_dimensions(layer.grid);
+            CHECK(gridRows == (10 + i * 5));
+            CHECK(gridCols == (15 + i * 5));
 
-            // Check some pixel values
+            // Check some pixel values (grid is uint8_t)
+            const auto &grid = layer.gridAs<uint8_t>();
             uint8_t expectedFirst = static_cast<uint8_t>((i * 50) % 256);
             CHECK(grid(0, 0) == expectedFirst);
         }

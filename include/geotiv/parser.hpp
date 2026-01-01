@@ -230,9 +230,19 @@ namespace geotiv {
 
             uint32_t bitsPerSample = getUInt(258);
             if (bitsPerSample == 0)
-                bitsPerSample = 1; // default
-            if (bitsPerSample != 8)
-                throw std::runtime_error("Only 8-bit samples supported, got " + std::to_string(bitsPerSample));
+                bitsPerSample = 8; // default to 8-bit
+
+            // Read SampleFormat tag (339) - defaults to 1 (unsigned int) if not present
+            uint32_t sampleFormatValue = getUInt(339);
+            if (sampleFormatValue == 0)
+                sampleFormatValue = 1; // default: unsigned integer
+            SampleFormat sampleFormat = static_cast<SampleFormat>(sampleFormatValue);
+
+            // Validate supported bit depths
+            if (bitsPerSample != 8 && bitsPerSample != 16 && bitsPerSample != 32 && bitsPerSample != 64) {
+                throw std::runtime_error("Unsupported bits per sample: " + std::to_string(bitsPerSample) +
+                                         ". Supported: 8, 16, 32, 64");
+            }
 
             L.stripOffsets = readUInts(273);    // StripOffsets
             L.stripByteCounts = readUInts(279); // StripByteCounts
@@ -248,7 +258,8 @@ namespace geotiv {
                 totalBytes += count;
             }
 
-            size_t expectedBytes = size_t(L.width) * L.height * L.samplesPerPixel;
+            size_t bytesPerSample = bitsPerSample / 8;
+            size_t expectedBytes = size_t(L.width) * L.height * L.samplesPerPixel * bytesPerSample;
             if (totalBytes != expectedBytes) {
                 throw std::runtime_error("Strip byte count mismatch: expected " + std::to_string(expectedBytes) +
                                          ", got " + std::to_string(totalBytes));
@@ -356,38 +367,117 @@ namespace geotiv {
             // Use the shift directly - it's already in ENU space
             dp::Pose shift = L.shift;
 
-            // Create grid using factory function
-            auto grid = dp::make_grid<uint8_t>(
-                /*rows=*/L.height,
-                /*cols=*/L.width,
-                /*resolution=*/L.resolution,
-                /*centered=*/true,
-                /*pose=*/shift,
-                /*default_value=*/uint8_t{0});
-
-            // Fill grid with pixel data
-            if (L.planarConfig == 1) { // Chunky format
-                size_t idx = 0;
-                // Data is written bottom-row-first, so flip it back when reading
-                for (int32_t r = L.height - 1; r >= 0; --r) {
-                    for (uint32_t c = 0; c < L.width; ++c) {
-                        // For multi-sample pixels, take first sample
-                        grid(r, c) = pix[idx];
-                        idx += L.samplesPerPixel;
+            // Helper lambda to read a value from the pixel buffer in little-endian format
+            auto readLE = [&pix, little](size_t offset, size_t bytes) -> uint64_t {
+                uint64_t value = 0;
+                if (little) {
+                    for (size_t i = 0; i < bytes; ++i) {
+                        value |= static_cast<uint64_t>(pix[offset + i]) << (8 * i);
+                    }
+                } else {
+                    for (size_t i = 0; i < bytes; ++i) {
+                        value |= static_cast<uint64_t>(pix[offset + i]) << (8 * (bytes - 1 - i));
                     }
                 }
-            } else { // Planar format
-                // Take first plane only
-                size_t idx = 0;
-                // Data is written bottom-row-first, so flip it back when reading
-                for (int32_t r = L.height - 1; r >= 0; --r) {
-                    for (uint32_t c = 0; c < L.width; ++c) {
-                        grid(r, c) = pix[idx++];
+                return value;
+            };
+
+            // Create and fill grid based on data type
+            // Lambda to fill grid from pixel data
+            auto fillGrid = [&](auto &grid, size_t bytesPerSample) {
+                using GridType = std::decay_t<decltype(grid)>;
+                using T = grid_element_type_t<GridType>;
+                if (L.planarConfig == 1) { // Chunky format
+                    size_t idx = 0;
+                    for (int32_t r = L.height - 1; r >= 0; --r) {
+                        for (uint32_t c = 0; c < L.width; ++c) {
+                            uint64_t rawValue = readLE(idx, bytesPerSample);
+                            if constexpr (std::is_floating_point_v<T>) {
+                                if constexpr (sizeof(T) == 4) {
+                                    uint32_t bits = static_cast<uint32_t>(rawValue);
+                                    float fval;
+                                    std::memcpy(&fval, &bits, sizeof(fval));
+                                    grid(r, c) = fval;
+                                } else {
+                                    double dval;
+                                    std::memcpy(&dval, &rawValue, sizeof(dval));
+                                    grid(r, c) = dval;
+                                }
+                            } else {
+                                grid(r, c) = static_cast<T>(rawValue);
+                            }
+                            idx += bytesPerSample * L.samplesPerPixel;
+                        }
                     }
+                } else { // Planar format
+                    size_t idx = 0;
+                    for (int32_t r = L.height - 1; r >= 0; --r) {
+                        for (uint32_t c = 0; c < L.width; ++c) {
+                            uint64_t rawValue = readLE(idx, bytesPerSample);
+                            if constexpr (std::is_floating_point_v<T>) {
+                                if constexpr (sizeof(T) == 4) {
+                                    uint32_t bits = static_cast<uint32_t>(rawValue);
+                                    float fval;
+                                    std::memcpy(&fval, &bits, sizeof(fval));
+                                    grid(r, c) = fval;
+                                } else {
+                                    double dval;
+                                    std::memcpy(&dval, &rawValue, sizeof(dval));
+                                    grid(r, c) = dval;
+                                }
+                            } else {
+                                grid(r, c) = static_cast<T>(rawValue);
+                            }
+                            idx += bytesPerSample;
+                        }
+                    }
+                }
+            };
+
+            // Create appropriate grid type based on bitsPerSample and sampleFormat
+            if (bitsPerSample == 8) {
+                if (sampleFormat == SampleFormat::SignedInt) {
+                    auto grid = dp::make_grid<int8_t>(L.height, L.width, L.resolution, true, shift, int8_t{0});
+                    fillGrid(grid, 1);
+                    L.grid = std::move(grid);
+                } else {
+                    auto grid = dp::make_grid<uint8_t>(L.height, L.width, L.resolution, true, shift, uint8_t{0});
+                    fillGrid(grid, 1);
+                    L.grid = std::move(grid);
+                }
+            } else if (bitsPerSample == 16) {
+                if (sampleFormat == SampleFormat::SignedInt) {
+                    auto grid = dp::make_grid<int16_t>(L.height, L.width, L.resolution, true, shift, int16_t{0});
+                    fillGrid(grid, 2);
+                    L.grid = std::move(grid);
+                } else {
+                    auto grid = dp::make_grid<uint16_t>(L.height, L.width, L.resolution, true, shift, uint16_t{0});
+                    fillGrid(grid, 2);
+                    L.grid = std::move(grid);
+                }
+            } else if (bitsPerSample == 32) {
+                if (sampleFormat == SampleFormat::Float) {
+                    auto grid = dp::make_grid<float>(L.height, L.width, L.resolution, true, shift, 0.0f);
+                    fillGrid(grid, 4);
+                    L.grid = std::move(grid);
+                } else if (sampleFormat == SampleFormat::SignedInt) {
+                    auto grid = dp::make_grid<int32_t>(L.height, L.width, L.resolution, true, shift, int32_t{0});
+                    fillGrid(grid, 4);
+                    L.grid = std::move(grid);
+                } else {
+                    auto grid = dp::make_grid<uint32_t>(L.height, L.width, L.resolution, true, shift, uint32_t{0});
+                    fillGrid(grid, 4);
+                    L.grid = std::move(grid);
+                }
+            } else if (bitsPerSample == 64) {
+                if (sampleFormat == SampleFormat::Float) {
+                    auto grid = dp::make_grid<double>(L.height, L.width, L.resolution, true, shift, 0.0);
+                    fillGrid(grid, 8);
+                    L.grid = std::move(grid);
+                } else {
+                    throw std::runtime_error("64-bit integer grids not supported");
                 }
             }
-
-            L.grid = std::move(grid);
             rc.layers.emplace_back(std::move(L));
         }
 

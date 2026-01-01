@@ -5,6 +5,7 @@
 #include "geotiv/writter.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <optional>
 #include <sstream>
@@ -23,6 +24,34 @@ namespace geotiv {
         inline GridLayer(const dp::Grid<uint8_t> &g, const std::string &layer_name, const std::string &layer_type = "",
                          const std::unordered_map<std::string, std::string> &props = {})
             : grid(g), name(layer_name), type(layer_type), properties(props) {}
+
+        /// Constructor from GridVariant - extracts uint8_t grid or converts
+        inline GridLayer(const GridVariant &gv, const std::string &layer_name, const std::string &layer_type = "",
+                         const std::unordered_map<std::string, std::string> &props = {})
+            : name(layer_name), type(layer_type), properties(props) {
+            // If it's already uint8_t, just copy it
+            if (auto *g8 = get_grid_if<uint8_t>(gv)) {
+                grid = *g8;
+            } else {
+                // Convert from other types to uint8_t
+                auto [rows, cols] = get_grid_dimensions(gv);
+                auto resolution = get_grid_resolution(gv);
+                auto pose = get_grid_pose(gv);
+                grid = dp::make_grid<uint8_t>(rows, cols, resolution, true, pose, uint8_t{0});
+
+                std::visit(
+                    [this](const auto &g) {
+                        for (size_t r = 0; r < g.rows; ++r) {
+                            for (size_t c = 0; c < g.cols; ++c) {
+                                // Clamp to uint8_t range
+                                auto val = static_cast<double>(g(r, c));
+                                grid(r, c) = static_cast<uint8_t>(std::clamp(val, 0.0, 255.0));
+                            }
+                        }
+                    },
+                    gv);
+            }
+        }
 
         inline void setGlobalProperty(const std::string &key, const std::string &value) {
             std::hash<std::string> hasher;
@@ -305,13 +334,17 @@ namespace geotiv {
 
         for (size_t layerIdx = 0; layerIdx < layerCount; ++layerIdx) {
             const auto &ifdLayer = rc.layers[layerIdx];
-            const auto &grid2d = ifdLayer.grid;
 
-            for (size_t r = 0; r < rows; ++r) {
-                for (size_t c = 0; c < cols; ++c) {
-                    layer3d(r, c, layerIdx) = static_cast<T>(grid2d(r, c));
-                }
-            }
+            // Use std::visit to handle the grid variant
+            std::visit(
+                [&](const auto &grid2d) {
+                    for (size_t r = 0; r < rows; ++r) {
+                        for (size_t c = 0; c < cols; ++c) {
+                            layer3d(r, c, layerIdx) = static_cast<T>(grid2d(r, c));
+                        }
+                    }
+                },
+                ifdLayer.grid);
         }
 
         return layer3d;

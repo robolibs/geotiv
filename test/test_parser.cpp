@@ -83,11 +83,12 @@ TEST_CASE("GeoTIFF Parser functionality") {
         CHECK(readRc.layers[0].resolution == doctest::Approx(cellSize).epsilon(0.001));
 
         // Verify grid dimensions
-        const auto &readGrid = readRc.layers[0].grid;
-        CHECK(readGrid.rows == rows);
-        CHECK(readGrid.cols == cols);
+        auto [gridRows, gridCols] = geotiv::get_grid_dimensions(readRc.layers[0].grid);
+        CHECK(gridRows == rows);
+        CHECK(gridCols == cols);
 
         // Verify some pixel values (note: might have precision differences)
+        const auto &readGrid = readRc.layers[0].gridAs<uint8_t>();
         CHECK(readGrid(0, 0) == 0); // (0+0) % 256 = 0
         CHECK(readGrid(1, 1) == 2); // (1+1) % 256 = 2
         CHECK(readGrid(2, 3) == 5); // (2+3) % 256 = 5
@@ -167,9 +168,9 @@ TEST_CASE("GeoTIFF Parser functionality") {
         }
 
         // Verify some pixel values from different layers
-        CHECK(readRc.layers[0].grid(0, 0) == 0);   // 0*100 + 0*10 + 0 = 0
-        CHECK(readRc.layers[1].grid(0, 1) == 101); // 1*100 + 0*10 + 1 = 101
-        CHECK(readRc.layers[2].grid(1, 2) == 212); // 2*100 + 1*10 + 2 = 212
+        CHECK(readRc.layers[0].gridAs<uint8_t>()(0, 0) == 0);   // 0*100 + 0*10 + 0 = 0
+        CHECK(readRc.layers[1].gridAs<uint8_t>()(0, 1) == 101); // 1*100 + 0*10 + 1 = 101
+        CHECK(readRc.layers[2].gridAs<uint8_t>()(1, 2) == 212); // 2*100 + 1*10 + 2 = 212
 
         // Clean up
         std::filesystem::remove(testFile);

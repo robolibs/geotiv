@@ -19,8 +19,30 @@ namespace geotiv {
 
     namespace fs = std::filesystem;
 
+    /// Helper to write a value in little-endian format to a buffer
+    template <typename T> inline void write_le(std::vector<uint8_t> &buf, size_t &pos, T value) {
+        for (size_t i = 0; i < sizeof(T); ++i) {
+            buf[pos++] = static_cast<uint8_t>((value >> (8 * i)) & 0xFF);
+        }
+    }
+
+    /// Specialization for float (use memcpy to preserve IEEE 754 format)
+    template <> inline void write_le<float>(std::vector<uint8_t> &buf, size_t &pos, float value) {
+        uint32_t bits;
+        std::memcpy(&bits, &value, sizeof(value));
+        write_le(buf, pos, bits);
+    }
+
+    /// Specialization for double (use memcpy to preserve IEEE 754 format)
+    template <> inline void write_le<double>(std::vector<uint8_t> &buf, size_t &pos, double value) {
+        uint64_t bits;
+        std::memcpy(&bits, &value, sizeof(value));
+        write_le(buf, pos, bits);
+    }
+
     /// Write out all layers in rc as a chained-IFD GeoTIFF.
     /// Each IFD can have its own CRS/DATUM/HEADING/PixelScale and custom tags.
+    /// Supports multiple data types: uint8, int8, uint16, int16, uint32, int32, float, double
     ///
     /// CRS Flavor Handling:
     /// - ENU flavor: Grid data is already in local space, datum provides reference
@@ -32,28 +54,47 @@ namespace geotiv {
             throw std::runtime_error("toTiffBytes(): no layers");
 
         // --- 1) Flatten each layer's grid into its own chunky strip ---
+        // Now handles multiple data types via std::visit
         std::vector<std::vector<uint8_t>> strips(N);
         std::vector<uint32_t> stripCounts(N), stripOffsets(N);
+        std::vector<uint16_t> bitsPerSample(N);
+        std::vector<SampleFormat> sampleFormats(N);
+
         for (size_t i = 0; i < N; ++i) {
             auto const &layer = rc.layers[i];
-            auto const &g = layer.grid;
-            uint32_t W = static_cast<uint32_t>(g.cols);
-            uint32_t H = static_cast<uint32_t>(g.rows);
-            uint32_t S = layer.samplesPerPixel;
-            size_t sz = size_t(W) * H * S;
-            strips[i].resize(sz);
-            stripCounts[i] = uint32_t(sz);
-            // fill chunky: band0,band1,... per pixel
-            // Flip vertically: write bottom row first to match GeoTIFF coordinate system
-            size_t idx = 0;
-            for (int32_t r = H - 1; r >= 0; --r) { // Start from bottom row, go up
-                for (uint32_t c = 0; c < W; ++c) {
-                    uint8_t v = g(r, c);
-                    for (uint32_t s = 0; s < S; ++s) {
-                        strips[i][idx++] = v;
+
+            // Get bits per sample and sample format from the grid variant
+            bitsPerSample[i] = get_bits_per_sample(layer.grid);
+            sampleFormats[i] = get_sample_format(layer.grid);
+
+            // Use std::visit to handle all grid types
+            std::visit(
+                [&](const auto &g) {
+                    using GridType = std::decay_t<decltype(g)>;
+                    using T = grid_element_type_t<GridType>;
+
+                    uint32_t W = static_cast<uint32_t>(g.cols);
+                    uint32_t H = static_cast<uint32_t>(g.rows);
+                    uint32_t S = layer.samplesPerPixel > 0 ? layer.samplesPerPixel : 1;
+                    size_t bytesPerSample = sizeof(T);
+                    size_t sz = size_t(W) * H * S * bytesPerSample;
+
+                    strips[i].resize(sz);
+                    stripCounts[i] = static_cast<uint32_t>(sz);
+
+                    // Fill chunky: band0,band1,... per pixel
+                    // Flip vertically: write bottom row first to match GeoTIFF coordinate system
+                    size_t idx = 0;
+                    for (int32_t r = H - 1; r >= 0; --r) {
+                        for (uint32_t c = 0; c < W; ++c) {
+                            T v = g(r, c);
+                            for (uint32_t s = 0; s < S; ++s) {
+                                write_le<T>(strips[i], idx, v);
+                            }
+                        }
                     }
-                }
-            }
+                },
+                layer.grid);
         }
 
         // --- 2) Compute strip offsets (right after the 8-byte TIFF header) ---
@@ -96,9 +137,9 @@ namespace geotiv {
         std::vector<uint32_t> customDataSizes(N);
 
         for (size_t i = 0; i < N; ++i) {
-            // Base tags: 9 standard + ImageDescription + PlanarConfig + ModelPixelScale + GeoKeyDirectory +
-            // ModelTiepointTag + custom tags
-            entryCounts[i] = 9 + 1 + 1 + 1 + 1 + 1 + static_cast<uint16_t>(rc.layers[i].customTags.size());
+            // Base tags: 9 standard + ImageDescription + PlanarConfig + SampleFormat + ModelPixelScale +
+            // GeoKeyDirectory + ModelTiepointTag + custom tags
+            entryCounts[i] = 9 + 1 + 1 + 1 + 1 + 1 + 1 + static_cast<uint16_t>(rc.layers[i].customTags.size());
 
             // Calculate space needed for multi-value custom tag data
             customDataSizes[i] = 0;
@@ -185,11 +226,11 @@ namespace geotiv {
             writeLE16(entryCounts[i]);
 
             auto const &layer = rc.layers[i];
-            auto const &g = layer.grid;
-            uint32_t W = uint32_t(g.cols);
-            uint32_t H = uint32_t(g.rows);
-            uint32_t S = layer.samplesPerPixel;
-            uint32_t PC = layer.planarConfig;
+            auto [rows, cols] = get_grid_dimensions(layer.grid);
+            uint32_t W = static_cast<uint32_t>(cols);
+            uint32_t H = static_cast<uint32_t>(rows);
+            uint32_t S = layer.samplesPerPixel > 0 ? layer.samplesPerPixel : 1;
+            uint32_t PC = layer.planarConfig > 0 ? layer.planarConfig : 1;
 
             // Tag 256: ImageWidth
             writeLE16(256);
@@ -203,11 +244,11 @@ namespace geotiv {
             writeLE32(1);
             writeLE32(H);
 
-            // Tag 258: BitsPerSample
+            // Tag 258: BitsPerSample (use actual bit depth from grid type)
             writeLE16(258);
-            writeLE16(3);
+            writeLE16(3); // SHORT type
             writeLE32(1);
-            writeLE32(8);
+            writeLE32(bitsPerSample[i]);
 
             // Tag 259: Compression (1 = uncompressed)
             writeLE16(259);
@@ -256,6 +297,12 @@ namespace geotiv {
             writeLE16(3);
             writeLE32(1);
             writeLE32(PC);
+
+            // Tag 339: SampleFormat (1=unsigned, 2=signed, 3=float)
+            writeLE16(339);
+            writeLE16(3); // SHORT type
+            writeLE32(1);
+            writeLE32(static_cast<uint32_t>(sampleFormats[i]));
 
             // Tag 33550: ModelPixelScaleTag
             writeLE16(33550);
@@ -359,9 +406,9 @@ namespace geotiv {
 
             // Write ModelTiepointTag for this layer
             writePos = tiepointOffsets[i];
-            auto const &g = layer.grid;
-            uint32_t W = uint32_t(g.cols);
-            uint32_t H = uint32_t(g.rows);
+            auto [tieRows, tieCols] = get_grid_dimensions(layer.grid);
+            uint32_t W = static_cast<uint32_t>(tieCols);
+            uint32_t H = static_cast<uint32_t>(tieRows);
 
             // Tiepoint format: I,J,K,X,Y,Z where (I,J,K) are pixel coords and (X,Y,Z) are world coords
             // Standard practice: tie pixel (0,0) to top-left corner world coordinates

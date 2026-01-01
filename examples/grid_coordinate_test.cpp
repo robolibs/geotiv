@@ -1,10 +1,8 @@
 #include "geotiv/geotiv.hpp"
-#include <concord/concord.hpp>
 #include <datapod/datapod.hpp>
 #include <iostream>
 
 namespace dp = datapod;
-namespace cc = concord;
 
 int main() {
     std::cout << "=== Grid Coordinate Test ===" << std::endl;
@@ -87,7 +85,8 @@ int main() {
             return 1;
         }
 
-        const auto &reconstructedGrid = rc.layers[0].grid;
+        // Get the grid as uint8_t (we know it's uint8_t since we wrote it that way)
+        const auto &reconstructedGrid = rc.layers[0].gridAs<uint8_t>();
 
         std::cout << "\nReconstructed Grid info:" << std::endl;
         std::cout << "Dimensions: " << reconstructedGrid.rows << "x" << reconstructedGrid.cols << std::endl;

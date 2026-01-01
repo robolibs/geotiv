@@ -10,7 +10,6 @@
 #include <datapod/datapod.hpp>
 
 namespace dp = datapod;
-namespace cc = concord;
 
 int main() {
     try {
