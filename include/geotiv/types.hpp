@@ -18,7 +18,38 @@ namespace geotiv {
 
     using std::uint16_t;
 
+    /// Tag number ranges per TIFF 6.0 specification
+    constexpr uint16_t TIFF_RESERVED_MAX = 32767;   // 0-32767 reserved for TIFF standard
+    constexpr uint16_t PRIVATE_TAG_MIN = 32768;     // 32768-65535 for private/custom use
+    constexpr uint16_t GEOTIV_RESERVED_MIN = 50000; // geotiv reserved range start
+    constexpr uint16_t GEOTIV_RESERVED_MAX = 50999; // geotiv reserved range end
     constexpr uint16_t GLOBAL_PROPERTIES_BASE_TAG = 50100;
+
+    /// Check if a tag number is safe for custom use
+    /// Returns true if tag is in private range (>=32768) or geotiv reserved range (50000-50999)
+    inline bool is_valid_custom_tag(uint16_t tag) {
+        // Private range: 32768-65535
+        if (tag >= PRIVATE_TAG_MIN) {
+            return true;
+        }
+        // geotiv reserved range: 50000-50999 (subset of private range, but explicit)
+        if (tag >= GEOTIV_RESERVED_MIN && tag <= GEOTIV_RESERVED_MAX) {
+            return true;
+        }
+        return false;
+    }
+
+    /// Check if a tag number is in the TIFF reserved range
+    inline bool is_reserved_tiff_tag(uint16_t tag) { return tag <= TIFF_RESERVED_MAX; }
+
+    /// Validate a custom tag number, throwing if invalid
+    inline void validate_custom_tag(uint16_t tag) {
+        if (!is_valid_custom_tag(tag)) {
+            throw std::runtime_error("Invalid custom tag number " + std::to_string(tag) +
+                                     ": must be >= 32768 (private range). "
+                                     "Tags 0-32767 are reserved for TIFF standard.");
+        }
+    }
 
     /// SampleFormat values as defined in TIFF spec (tag 339)
     enum class SampleFormat : uint16_t {
@@ -188,9 +219,32 @@ namespace geotiv {
         /// Try to get grid as specific type (const version)
         template <typename T> inline const dp::Grid<T> *gridIf() const { return get_grid_if<T>(grid); }
 
+        /// Set a custom tag with validation
+        /// Throws std::runtime_error if tag is in reserved TIFF range (0-32767)
+        inline void setCustomTag(uint16_t tag, const std::vector<uint32_t> &values) {
+            validate_custom_tag(tag);
+            customTags[tag] = values;
+        }
+
+        /// Set a custom tag with a single value
+        inline void setCustomTag(uint16_t tag, uint32_t value) { setCustomTag(tag, std::vector<uint32_t>{value}); }
+
+        /// Get a custom tag value (returns empty vector if not found)
+        inline std::vector<uint32_t> getCustomTag(uint16_t tag) const {
+            auto it = customTags.find(tag);
+            if (it != customTags.end()) {
+                return it->second;
+            }
+            return {};
+        }
+
+        /// Check if a custom tag exists
+        inline bool hasCustomTag(uint16_t tag) const { return customTags.find(tag) != customTags.end(); }
+
         inline void setGlobalProperty(const std::string &key, const std::string &value) {
             std::hash<std::string> hasher;
             uint16_t tag = GLOBAL_PROPERTIES_BASE_TAG + (hasher(key) % 1000);
+            // Global properties are in geotiv reserved range, no validation needed
             customTags[tag] = stringToAsciiTag(key + "=" + value);
         }
 

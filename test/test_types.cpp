@@ -411,6 +411,78 @@ TEST_CASE("Round-trip write/read for different grid types") {
     }
 }
 
+TEST_CASE("Custom tag validation") {
+    SUBCASE("is_valid_custom_tag returns correct values") {
+        // Reserved TIFF tags (0-32767) should be invalid
+        CHECK_FALSE(geotiv::is_valid_custom_tag(0));
+        CHECK_FALSE(geotiv::is_valid_custom_tag(256));   // ImageWidth
+        CHECK_FALSE(geotiv::is_valid_custom_tag(339));   // SampleFormat
+        CHECK_FALSE(geotiv::is_valid_custom_tag(32767)); // Last reserved
+
+        // Private range (32768+) should be valid
+        CHECK(geotiv::is_valid_custom_tag(32768)); // First private
+        CHECK(geotiv::is_valid_custom_tag(50000)); // geotiv reserved start
+        CHECK(geotiv::is_valid_custom_tag(50100)); // Global properties base
+        CHECK(geotiv::is_valid_custom_tag(50999)); // geotiv reserved end
+        CHECK(geotiv::is_valid_custom_tag(65535)); // Max tag
+    }
+
+    SUBCASE("validate_custom_tag throws for reserved tags") {
+        CHECK_THROWS_AS(geotiv::validate_custom_tag(0), std::runtime_error);
+        CHECK_THROWS_AS(geotiv::validate_custom_tag(256), std::runtime_error);
+        CHECK_THROWS_AS(geotiv::validate_custom_tag(32767), std::runtime_error);
+
+        CHECK_NOTHROW(geotiv::validate_custom_tag(32768));
+        CHECK_NOTHROW(geotiv::validate_custom_tag(50100));
+    }
+
+    SUBCASE("Layer.setCustomTag validates tag numbers") {
+        geotiv::Layer layer;
+
+        // Valid tags should work
+        CHECK_NOTHROW(layer.setCustomTag(50000, 123));
+        CHECK_NOTHROW(layer.setCustomTag(32768, std::vector<uint32_t>{1, 2, 3}));
+
+        // Invalid tags should throw
+        CHECK_THROWS_AS(layer.setCustomTag(256, 123), std::runtime_error);
+        CHECK_THROWS_AS(layer.setCustomTag(0, 123), std::runtime_error);
+    }
+
+    SUBCASE("Layer.getCustomTag and hasCustomTag work correctly") {
+        geotiv::Layer layer;
+        layer.setCustomTag(50001, 42);
+        layer.setCustomTag(50002, std::vector<uint32_t>{10, 20, 30});
+
+        CHECK(layer.hasCustomTag(50001));
+        CHECK(layer.hasCustomTag(50002));
+        CHECK_FALSE(layer.hasCustomTag(50003));
+
+        auto val1 = layer.getCustomTag(50001);
+        REQUIRE(val1.size() == 1);
+        CHECK(val1[0] == 42);
+
+        auto val2 = layer.getCustomTag(50002);
+        REQUIRE(val2.size() == 3);
+        CHECK(val2[0] == 10);
+        CHECK(val2[1] == 20);
+        CHECK(val2[2] == 30);
+
+        auto val3 = layer.getCustomTag(50003);
+        CHECK(val3.empty());
+    }
+
+    SUBCASE("Global properties still work (in geotiv reserved range)") {
+        geotiv::Layer layer;
+
+        // Global properties should work without throwing
+        CHECK_NOTHROW(layer.setGlobalProperty("test_key", "test_value"));
+
+        auto props = layer.getGlobalProperties();
+        CHECK(props.count("test_key") == 1);
+        CHECK(props["test_key"] == "test_value");
+    }
+}
+
 TEST_CASE("Layer structure tests") {
     SUBCASE("Default Layer construction") {
         geotiv::Layer layer;

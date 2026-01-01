@@ -138,13 +138,34 @@ namespace geotiv {
             uint32_t currentIFDOffset = nextIFD;
             nextIFD = read32(f);
 
-            // helpers
+            // TIFF type constants
+            constexpr uint16_t TIFF_BYTE = 1;       // 8-bit unsigned
+            constexpr uint16_t TIFF_ASCII = 2;      // 8-bit ASCII
+            constexpr uint16_t TIFF_SHORT = 3;      // 16-bit unsigned
+            constexpr uint16_t TIFF_LONG = 4;       // 32-bit unsigned
+            constexpr uint16_t TIFF_RATIONAL = 5;   // Two LONGs (num/denom)
+            constexpr uint16_t TIFF_SBYTE = 6;      // 8-bit signed
+            constexpr uint16_t TIFF_UNDEFINED = 7;  // 8-bit untyped
+            constexpr uint16_t TIFF_SSHORT = 8;     // 16-bit signed
+            constexpr uint16_t TIFF_SLONG = 9;      // 32-bit signed
+            constexpr uint16_t TIFF_SRATIONAL = 10; // Two SLONGs
+            constexpr uint16_t TIFF_FLOAT = 11;     // 32-bit IEEE float
+            constexpr uint16_t TIFF_DOUBLE = 12;    // 64-bit IEEE double
+
+            // Helper: get single unsigned integer value from tag
+            // Supports BYTE, SHORT, LONG types
             auto getUInt = [&](uint16_t tag) -> uint32_t {
                 auto it = E.find(tag);
                 if (it == E.end())
                     return 0;
                 auto &e = it->second;
-                if (e.type == 3) { // SHORT
+
+                if (e.type == TIFF_BYTE || e.type == TIFF_UNDEFINED) {
+                    // BYTE: up to 4 values fit in valueOffset field
+                    if (e.count >= 1) {
+                        return little ? (e.valueOffset & 0xFF) : ((e.valueOffset >> 24) & 0xFF);
+                    }
+                } else if (e.type == TIFF_SHORT) {
                     if (e.count == 1) {
                         return little ? (e.valueOffset & 0xFFFF) : ((e.valueOffset >> 16) & 0xFFFF);
                     } else {
@@ -152,12 +173,25 @@ namespace geotiv {
                         f.seekg(e.valueOffset, std::ios::beg);
                         return read16(f);
                     }
-                } else if (e.type == 4) { // LONG
+                } else if (e.type == TIFF_LONG) {
+                    return e.valueOffset;
+                } else if (e.type == TIFF_SBYTE) {
+                    // Signed byte - return as unsigned for compatibility
+                    if (e.count >= 1) {
+                        return little ? (e.valueOffset & 0xFF) : ((e.valueOffset >> 24) & 0xFF);
+                    }
+                } else if (e.type == TIFF_SSHORT) {
+                    if (e.count == 1) {
+                        return little ? (e.valueOffset & 0xFFFF) : ((e.valueOffset >> 16) & 0xFFFF);
+                    }
+                } else if (e.type == TIFF_SLONG) {
                     return e.valueOffset;
                 }
                 return 0;
             };
 
+            // Helper: read multiple unsigned integer values from tag
+            // Supports BYTE, SHORT, LONG types
             auto readUInts = [&](uint16_t tag) -> std::vector<uint32_t> {
                 auto it = E.find(tag);
                 if (it == E.end())
@@ -165,7 +199,28 @@ namespace geotiv {
                 auto &e = it->second;
 
                 std::vector<uint32_t> out;
-                if (e.type == 3) { // SHORT
+
+                if (e.type == TIFF_BYTE || e.type == TIFF_UNDEFINED || e.type == TIFF_SBYTE) {
+                    // BYTE: up to 4 values fit in valueOffset field
+                    if (e.count <= 4) {
+                        for (uint32_t i = 0; i < e.count; ++i) {
+                            uint8_t val;
+                            if (little) {
+                                val = (e.valueOffset >> (8 * i)) & 0xFF;
+                            } else {
+                                val = (e.valueOffset >> (8 * (3 - i))) & 0xFF;
+                            }
+                            out.push_back(val);
+                        }
+                    } else {
+                        f.seekg(e.valueOffset, std::ios::beg);
+                        for (uint32_t i = 0; i < e.count; ++i) {
+                            uint8_t val;
+                            f.read(reinterpret_cast<char *>(&val), 1);
+                            out.push_back(val);
+                        }
+                    }
+                } else if (e.type == TIFF_SHORT || e.type == TIFF_SSHORT) {
                     if (e.count == 1) {
                         uint16_t val = little ? (e.valueOffset & 0xFFFF) : ((e.valueOffset >> 16) & 0xFFFF);
                         out.push_back(val);
@@ -179,7 +234,7 @@ namespace geotiv {
                         for (uint32_t i = 0; i < e.count; ++i)
                             out.push_back(read16(f));
                     }
-                } else if (e.type == 4) { // LONG
+                } else if (e.type == TIFF_LONG || e.type == TIFF_SLONG) {
                     if (e.count == 1) {
                         out.push_back(e.valueOffset);
                     } else {
@@ -191,6 +246,63 @@ namespace geotiv {
                 return out;
             };
 
+            // Helper: read RATIONAL values (pairs of LONGs as numerator/denominator)
+            // Returns as doubles for convenience
+            auto readRationals = [&](uint16_t tag) -> std::vector<double> {
+                auto it = E.find(tag);
+                if (it == E.end())
+                    return {};
+                auto &e = it->second;
+
+                std::vector<double> out;
+                if (e.type != TIFF_RATIONAL && e.type != TIFF_SRATIONAL)
+                    return out;
+
+                f.seekg(e.valueOffset, std::ios::beg);
+                for (uint32_t i = 0; i < e.count; ++i) {
+                    uint32_t num = read32(f);
+                    uint32_t denom = read32(f);
+                    if (denom == 0) {
+                        out.push_back(0.0); // Avoid division by zero
+                    } else if (e.type == TIFF_SRATIONAL) {
+                        out.push_back(static_cast<double>(static_cast<int32_t>(num)) /
+                                      static_cast<double>(static_cast<int32_t>(denom)));
+                    } else {
+                        out.push_back(static_cast<double>(num) / static_cast<double>(denom));
+                    }
+                }
+                return out;
+            };
+
+            // Helper: read FLOAT values (32-bit IEEE)
+            auto readFloats = [&](uint16_t tag) -> std::vector<float> {
+                auto it = E.find(tag);
+                if (it == E.end())
+                    return {};
+                auto &e = it->second;
+
+                std::vector<float> out;
+                if (e.type != TIFF_FLOAT)
+                    return out;
+
+                if (e.count == 1) {
+                    // Single float fits in valueOffset
+                    float fval;
+                    std::memcpy(&fval, &e.valueOffset, sizeof(fval));
+                    out.push_back(fval);
+                } else {
+                    f.seekg(e.valueOffset, std::ios::beg);
+                    for (uint32_t i = 0; i < e.count; ++i) {
+                        uint32_t bits = read32(f);
+                        float fval;
+                        std::memcpy(&fval, &bits, sizeof(fval));
+                        out.push_back(fval);
+                    }
+                }
+                return out;
+            };
+
+            // Helper: read DOUBLE values (64-bit IEEE)
             auto readDoubles = [&](uint16_t tag) -> std::vector<double> {
                 auto it = E.find(tag);
                 if (it == E.end())
@@ -198,8 +310,23 @@ namespace geotiv {
                 auto &e = it->second;
 
                 std::vector<double> out;
-                if (e.type != 12)
-                    return out; // 12 = DOUBLE
+
+                // Also accept FLOAT type and convert to double
+                if (e.type == TIFF_FLOAT) {
+                    auto floats = readFloats(tag);
+                    for (float fv : floats) {
+                        out.push_back(static_cast<double>(fv));
+                    }
+                    return out;
+                }
+
+                // Also accept RATIONAL type
+                if (e.type == TIFF_RATIONAL || e.type == TIFF_SRATIONAL) {
+                    return readRationals(tag);
+                }
+
+                if (e.type != TIFF_DOUBLE)
+                    return out;
 
                 f.seekg(e.valueOffset, std::ios::beg);
                 for (uint32_t i = 0; i < e.count; ++i) {
@@ -314,24 +441,56 @@ namespace geotiv {
                 layerDatum = dp::Geo{0.001, 0.001, 1.0}; // Valid minimal coordinates
             }
 
-            // ModelPixelScale → resolution for this IFD
-            auto scales = readDoubles(33550);
-            if (scales.size() >= 2) {
-                // PixelScale is stored in degrees, use precise concord conversions to get back meters
-                double resolution_deg_lon = scales[0]; // X scale in degrees
-                // scales[1] is Y scale (negative for standard GeoTIFF), but we use X scale for resolution
+            // Try ModelTransformationTag (34264) first for rotated grids
+            // Then fall back to ModelPixelScaleTag (33550) for non-rotated grids
+            auto transform = readDoubles(34264);
+            if (transform.size() >= 16) {
+                // ModelTransformationTag: 4x4 affine matrix (row-major)
+                // [a b 0 d; e f 0 h; 0 0 1 0; 0 0 0 1]
+                // a = scale_x * cos(θ), b = -scale_y * sin(θ)
+                // e = scale_x * sin(θ), f = scale_y * cos(θ)
+                double a = transform[0];
+                double b = transform[1];
+                double e = transform[4];
+                double f = transform[5];
 
-                // Use precise concord conversion: create two WGS points and convert to ENU to get distance
+                // Extract scale and rotation from the matrix
+                // scale_x = sqrt(a² + e²) gives the X scale in degrees
+                double scale_x_deg = std::sqrt(a * a + e * e);
+
+                // Extract rotation angle: θ = atan2(e, a)
+                double yaw = std::atan2(e, a);
+                layerShift.rotation = dp::Quaternion::from_euler(0, 0, yaw);
+
+                // Convert X scale from degrees to meters using precise concord conversion
+                // Use the X scale (longitude) since that's what we use for non-rotated grids too
                 cc::earth::WGS center_wgs{layerDatum.latitude, layerDatum.longitude, layerDatum.altitude};
-                cc::earth::WGS east_point_wgs{layerDatum.latitude, layerDatum.longitude + resolution_deg_lon,
+                cc::earth::WGS east_point_wgs{layerDatum.latitude, layerDatum.longitude + scale_x_deg,
                                               layerDatum.altitude};
 
                 cc::frame::ENU center_enu = cc::frame::to_enu(layerDatum, center_wgs);
                 cc::frame::ENU east_point_enu = cc::frame::to_enu(layerDatum, east_point_wgs);
 
-                // Calculate precise meter distance (use absolute value since Y scale is negative)
                 layerResolution = east_point_enu.x() - center_enu.x();
-                // Could also verify with Y direction: abs(north_point_enu.y - center_enu.y)
+            } else {
+                // ModelPixelScale → resolution for this IFD (non-rotated grids)
+                auto scales = readDoubles(33550);
+                if (scales.size() >= 2) {
+                    // PixelScale is stored in degrees, use precise concord conversions to get back meters
+                    double resolution_deg_lon = scales[0]; // X scale in degrees
+                    // scales[1] is Y scale (negative for standard GeoTIFF), but we use X scale for resolution
+
+                    // Use precise concord conversion: create two WGS points and convert to ENU to get distance
+                    cc::earth::WGS center_wgs{layerDatum.latitude, layerDatum.longitude, layerDatum.altitude};
+                    cc::earth::WGS east_point_wgs{layerDatum.latitude, layerDatum.longitude + resolution_deg_lon,
+                                                  layerDatum.altitude};
+
+                    cc::frame::ENU center_enu = cc::frame::to_enu(layerDatum, center_wgs);
+                    cc::frame::ENU east_point_enu = cc::frame::to_enu(layerDatum, east_point_wgs);
+
+                    // Calculate precise meter distance (use absolute value since Y scale is negative)
+                    layerResolution = east_point_enu.x() - center_enu.x();
+                }
             }
 
             if (layerResolution <= 0) {

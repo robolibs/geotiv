@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -18,6 +19,25 @@ namespace cc = concord;
 namespace geotiv {
 
     namespace fs = std::filesystem;
+
+    /// TIFF IFD entry structure for building sorted tag lists
+    struct IfdEntry {
+        uint16_t tag;
+        uint16_t type;
+        uint32_t count;
+        uint32_t value_or_offset;
+
+        bool operator<(const IfdEntry &other) const { return tag < other.tag; }
+    };
+
+    /// Check if a layer has significant rotation (non-zero yaw)
+    /// Returns true if rotation should be encoded using ModelTransformationTag
+    inline bool has_rotation(const Layer &layer) {
+        auto euler = layer.shift.rotation.to_euler();
+        // Consider rotation significant if yaw is more than ~0.01 degrees
+        constexpr double ROTATION_THRESHOLD = 0.0002; // ~0.01 degrees in radians
+        return std::abs(euler.yaw) > ROTATION_THRESHOLD;
+    }
 
     /// Helper to write a value in little-endian format to a buffer
     template <typename T> inline void write_le(std::vector<uint8_t> &buf, size_t &pos, T value) {
@@ -112,9 +132,12 @@ namespace geotiv {
         std::vector<uint32_t> scaleOffsets(N);
         std::vector<uint32_t> geoKeyOffsets(N);
         std::vector<uint32_t> tiepointOffsets(N);
+        std::vector<uint32_t> transformOffsets(N); // For ModelTransformationTag (rotated grids)
+        std::vector<bool> layerHasRotation(N);     // Track which layers need transformation matrix
 
         for (size_t i = 0; i < N; ++i) {
             auto const &layer = rc.layers[i];
+            layerHasRotation[i] = has_rotation(layer);
 
             // Build ImageDescription for this layer
             if (!layer.imageDescription.empty()) {
@@ -137,9 +160,10 @@ namespace geotiv {
         std::vector<uint32_t> customDataSizes(N);
 
         for (size_t i = 0; i < N; ++i) {
-            // Base tags: 9 standard + ImageDescription + PlanarConfig + SampleFormat + ModelPixelScale +
-            // GeoKeyDirectory + ModelTiepointTag + custom tags
-            entryCounts[i] = 9 + 1 + 1 + 1 + 1 + 1 + 1 + static_cast<uint16_t>(rc.layers[i].customTags.size());
+            // Base tags: 9 standard + ImageDescription + PlanarConfig + SampleFormat + GeoKeyDirectory + custom tags
+            // Plus either (ModelPixelScale + ModelTiepoint) OR ModelTransformation
+            uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2; // 1 for transform, 2 for scale+tiepoint
+            entryCounts[i] = 9 + 1 + 1 + 1 + 1 + geoTagCount + static_cast<uint16_t>(rc.layers[i].customTags.size());
 
             // Calculate space needed for multi-value custom tag data
             customDataSizes[i] = 0;
@@ -167,14 +191,25 @@ namespace geotiv {
             descOffsets[i] = p;
             p += descLengths[i];
 
-            scaleOffsets[i] = p;
-            p += 24; // 3 doubles = 24 bytes
-
             geoKeyOffsets[i] = p;
             p += 40; // GeoKeyDirectory = 40 bytes (header:8 + 4 keys×8 = 40)
 
-            tiepointOffsets[i] = p;
-            p += 48; // ModelTiepointTag = 48 bytes (6 doubles)
+            if (layerHasRotation[i]) {
+                // ModelTransformationTag: 16 doubles = 128 bytes
+                transformOffsets[i] = p;
+                p += 128;
+                scaleOffsets[i] = 0;    // Not used
+                tiepointOffsets[i] = 0; // Not used
+            } else {
+                // ModelPixelScaleTag + ModelTiepointTag
+                scaleOffsets[i] = p;
+                p += 24; // 3 doubles = 24 bytes
+
+                tiepointOffsets[i] = p;
+                p += 48; // 6 doubles = 48 bytes
+
+                transformOffsets[i] = 0; // Not used
+            }
 
             // Custom tag data offset
             customDataOffsets[i] = p;
@@ -218,12 +253,10 @@ namespace geotiv {
             writePos += strips[i].size();
         }
 
-        // --- 8) IFDs ---
+        // --- 8) IFDs (with proper tag ordering per TIFF 6.0 spec) ---
         for (size_t i = 0; i < N; ++i) {
             // Seek to the correct IFD position
             writePos = ifdOffsets[i];
-
-            writeLE16(entryCounts[i]);
 
             auto const &layer = rc.layers[i];
             auto [rows, cols] = get_grid_dimensions(layer.grid);
@@ -232,108 +265,60 @@ namespace geotiv {
             uint32_t S = layer.samplesPerPixel > 0 ? layer.samplesPerPixel : 1;
             uint32_t PC = layer.planarConfig > 0 ? layer.planarConfig : 1;
 
-            // Tag 256: ImageWidth
-            writeLE16(256);
-            writeLE16(4);
-            writeLE32(1);
-            writeLE32(W);
+            // Collect all tags into a vector for sorting
+            std::vector<IfdEntry> entries;
+            entries.reserve(entryCounts[i]);
 
-            // Tag 257: ImageLength
-            writeLE16(257);
-            writeLE16(4);
-            writeLE32(1);
-            writeLE32(H);
+            // Standard TIFF tags
+            entries.push_back({256, 4, 1, W});                                       // ImageWidth
+            entries.push_back({257, 4, 1, H});                                       // ImageLength
+            entries.push_back({258, 3, 1, bitsPerSample[i]});                        // BitsPerSample
+            entries.push_back({259, 3, 1, 1});                                       // Compression (uncompressed)
+            entries.push_back({262, 3, 1, 1});                                       // PhotometricInterpretation
+            entries.push_back({270, 2, descLengths[i], descOffsets[i]});             // ImageDescription
+            entries.push_back({273, 4, 1, stripOffsets[i]});                         // StripOffsets
+            entries.push_back({277, 3, 1, S});                                       // SamplesPerPixel
+            entries.push_back({278, 4, 1, H});                                       // RowsPerStrip
+            entries.push_back({279, 4, 1, stripCounts[i]});                          // StripByteCounts
+            entries.push_back({284, 3, 1, PC});                                      // PlanarConfiguration
+            entries.push_back({339, 3, 1, static_cast<uint32_t>(sampleFormats[i])}); // SampleFormat
 
-            // Tag 258: BitsPerSample (use actual bit depth from grid type)
-            writeLE16(258);
-            writeLE16(3); // SHORT type
-            writeLE32(1);
-            writeLE32(bitsPerSample[i]);
+            // GeoTIFF tags - use either Scale+Tiepoint or Transformation based on rotation
+            if (layerHasRotation[i]) {
+                // Rotated grid: use ModelTransformationTag (34264)
+                entries.push_back({34264, 12, 16, transformOffsets[i]}); // ModelTransformationTag
+            } else {
+                // Non-rotated grid: use Scale + Tiepoint
+                entries.push_back({33550, 12, 3, scaleOffsets[i]});    // ModelPixelScaleTag
+                entries.push_back({33922, 12, 6, tiepointOffsets[i]}); // ModelTiepointTag
+            }
+            entries.push_back({34735, 3, 20, geoKeyOffsets[i]}); // GeoKeyDirectoryTag
 
-            // Tag 259: Compression (1 = uncompressed)
-            writeLE16(259);
-            writeLE16(3);
-            writeLE32(1);
-            writeLE32(1);
-
-            // Tag 262: PhotometricInterpretation (1 = BlackIsZero)
-            writeLE16(262);
-            writeLE16(3);
-            writeLE32(1);
-            writeLE32(1);
-
-            // Tag 270: ImageDescription
-            writeLE16(270);
-            writeLE16(2);
-            writeLE32(descLengths[i]);
-            writeLE32(descOffsets[i]);
-
-            // Tag 273: StripOffsets
-            writeLE16(273);
-            writeLE16(4);
-            writeLE32(1);
-            writeLE32(stripOffsets[i]);
-
-            // Tag 277: SamplesPerPixel
-            writeLE16(277);
-            writeLE16(3);
-            writeLE32(1);
-            writeLE32(S);
-
-            // Tag 278: RowsPerStrip
-            writeLE16(278);
-            writeLE16(4);
-            writeLE32(1);
-            writeLE32(H);
-
-            // Tag 279: StripByteCounts
-            writeLE16(279);
-            writeLE16(4);
-            writeLE32(1);
-            writeLE32(stripCounts[i]);
-
-            // Tag 284: PlanarConfiguration
-            writeLE16(284);
-            writeLE16(3);
-            writeLE32(1);
-            writeLE32(PC);
-
-            // Tag 339: SampleFormat (1=unsigned, 2=signed, 3=float)
-            writeLE16(339);
-            writeLE16(3); // SHORT type
-            writeLE32(1);
-            writeLE32(static_cast<uint32_t>(sampleFormats[i]));
-
-            // Tag 33550: ModelPixelScaleTag
-            writeLE16(33550);
-            writeLE16(12);
-            writeLE32(3);
-            writeLE32(scaleOffsets[i]);
-
-            // Tag 33922: ModelTiepointTag (must come before 34735)
-            writeLE16(33922);
-            writeLE16(12);
-            writeLE32(6);
-            writeLE32(tiepointOffsets[i]);
-
-            // Tag 34735: GeoKeyDirectoryTag
-            writeLE16(34735);
-            writeLE16(3);
-            writeLE32(20); // 20 uint16 values: header(4) + 4 keys×4 = 20
-            writeLE32(geoKeyOffsets[i]);
-
-            // Write custom tags for this layer
+            // Custom tags
             uint32_t customDataPos = customDataOffsets[i];
             for (const auto &[tag, values] : layer.customTags) {
-                writeLE16(tag);
-                writeLE16(4); // LONG type
-                writeLE32(static_cast<uint32_t>(values.size()));
+                uint32_t valueOrOffset;
                 if (values.size() == 1) {
-                    writeLE32(values[0]); // Value fits in offset field
+                    valueOrOffset = values[0]; // Value fits in offset field
                 } else {
-                    writeLE32(customDataPos); // Pointer to data
+                    valueOrOffset = customDataPos; // Pointer to data
                     customDataPos += static_cast<uint32_t>(values.size() * 4);
                 }
+                entries.push_back({tag, 4, static_cast<uint32_t>(values.size()), valueOrOffset});
+            }
+
+            // Sort entries by tag number (TIFF 6.0 requirement)
+            std::sort(entries.begin(), entries.end());
+
+            // Write entry count
+            writeLE16(static_cast<uint16_t>(entries.size()));
+
+            // Write sorted entries
+            for (const auto &entry : entries) {
+                writeLE16(entry.tag);
+                writeLE16(entry.type);
+                writeLE32(entry.count);
+                writeLE32(entry.value_or_offset);
             }
 
             // next IFD pointer
@@ -344,34 +329,14 @@ namespace geotiv {
         // --- 9) Write variable-length data for each layer ---
         for (size_t i = 0; i < N; ++i) {
             auto const &layer = rc.layers[i];
+            auto [gridRows, gridCols] = get_grid_dimensions(layer.grid);
+            uint32_t W = static_cast<uint32_t>(gridCols);
+            uint32_t H = static_cast<uint32_t>(gridRows);
 
             // Description text + NUL
             writePos = descOffsets[i];
             std::memcpy(&buf[writePos], descriptions[i].data(), descriptions[i].size());
             buf[writePos + descriptions[i].size()] = '\0';
-
-            // PixelScale doubles: X, Y, Z
-            writePos = scaleOffsets[i];
-            // Use precise concord library conversions for cm/mm accuracy
-            // Create ENU points at grid center and at resolution distance from center
-            cc::frame::ENU center_enu{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};
-            cc::frame::ENU east_point_enu{layer.shift.point.x + layer.resolution, layer.shift.point.y,
-                                          layer.shift.point.z, layer.datum}; // resolution meters east from center
-            cc::frame::ENU north_point_enu{layer.shift.point.x, layer.shift.point.y + layer.resolution,
-                                           layer.shift.point.z, layer.datum}; // resolution meters north from center
-
-            // Convert to WGS84 for precise degree differences
-            cc::earth::WGS center_wgs = cc::frame::to_wgs(center_enu);
-            cc::earth::WGS east_point_wgs = cc::frame::to_wgs(east_point_enu);
-            cc::earth::WGS north_point_wgs = cc::frame::to_wgs(north_point_enu);
-
-            // Calculate precise degree per meter scaling
-            double resolution_deg_lon = east_point_wgs.longitude - center_wgs.longitude; // precise longitude scale
-            double resolution_deg_lat = north_point_wgs.latitude - center_wgs.latitude;  // precise latitude scale
-
-            writeDouble(resolution_deg_lon);  // X scale in degrees (longitude, positive = eastward)
-            writeDouble(-resolution_deg_lat); // Y scale in degrees (negative = rows increase southward)
-            writeDouble(0.0);                 // Z scale
 
             // GeoKeyDirectory for this layer (always WGS84)
             writePos = geoKeyOffsets[i];
@@ -404,53 +369,114 @@ namespace geotiv {
             writeLE16(1);    // Count
             writeLE16(9102); // 9102=degree
 
-            // Write ModelTiepointTag for this layer
-            writePos = tiepointOffsets[i];
-            auto [tieRows, tieCols] = get_grid_dimensions(layer.grid);
-            uint32_t W = static_cast<uint32_t>(tieCols);
-            uint32_t H = static_cast<uint32_t>(tieRows);
+            // Calculate common values needed for georeferencing
+            cc::frame::ENU center_enu{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};
+            cc::earth::WGS center_wgs = cc::frame::to_wgs(center_enu);
 
-            // Tiepoint format: I,J,K,X,Y,Z where (I,J,K) are pixel coords and (X,Y,Z) are world coords
-            // Standard practice: tie pixel (0,0) to top-left corner world coordinates
-            writeDouble(0.0); // I: pixel column 0 (left edge)
-            writeDouble(0.0); // J: pixel row 0 (top edge)
-            writeDouble(0.0); // K: always 0 for 2D
+            // Calculate pixel scale in degrees
+            cc::frame::ENU east_point_enu{layer.shift.point.x + layer.resolution, layer.shift.point.y,
+                                          layer.shift.point.z, layer.datum};
+            cc::frame::ENU north_point_enu{layer.shift.point.x, layer.shift.point.y + layer.resolution,
+                                           layer.shift.point.z, layer.datum};
+            cc::earth::WGS east_point_wgs = cc::frame::to_wgs(east_point_enu);
+            cc::earth::WGS north_point_wgs = cc::frame::to_wgs(north_point_enu);
 
-            // Calculate top-left corner coordinates from grid center (shift)
-            // First get grid dimensions in meters, then convert to degrees
-            double grid_width_meters = W * layer.resolution;  // Total width in meters
-            double grid_height_meters = H * layer.resolution; // Total height in meters
+            double scale_x = east_point_wgs.longitude - center_wgs.longitude; // degrees per pixel (longitude)
+            double scale_y = north_point_wgs.latitude - center_wgs.latitude;  // degrees per pixel (latitude)
 
-            // Convert half-extents from meters to degrees using precise conversion
-            // We need to calculate how many degrees the grid spans from the grid center (shift point)
+            // Calculate grid extents
+            double grid_width_meters = W * layer.resolution;
+            double grid_height_meters = H * layer.resolution;
+
             cc::frame::ENU grid_west{layer.shift.point.x - grid_width_meters / 2.0, layer.shift.point.y,
                                      layer.shift.point.z, layer.datum};
-            cc::frame::ENU grid_east{layer.shift.point.x + grid_width_meters / 2.0, layer.shift.point.y,
-                                     layer.shift.point.z, layer.datum};
-            cc::frame::ENU grid_south{layer.shift.point.x, layer.shift.point.y - grid_height_meters / 2.0,
-                                      layer.shift.point.z, layer.datum};
             cc::frame::ENU grid_north{layer.shift.point.x, layer.shift.point.y + grid_height_meters / 2.0,
                                       layer.shift.point.z, layer.datum};
-
             cc::earth::WGS west_wgs = cc::frame::to_wgs(grid_west);
-            cc::earth::WGS east_wgs = cc::frame::to_wgs(grid_east);
-            cc::earth::WGS south_wgs = cc::frame::to_wgs(grid_south);
             cc::earth::WGS north_wgs = cc::frame::to_wgs(grid_north);
 
-            double half_width = (east_wgs.longitude - west_wgs.longitude) / 2.0;  // Half width in degrees
-            double half_height = (north_wgs.latitude - south_wgs.latitude) / 2.0; // Half height in degrees
+            double half_width_deg = center_wgs.longitude - west_wgs.longitude;
+            double half_height_deg = north_wgs.latitude - center_wgs.latitude;
 
-            // Convert center to WGS84 first
-            cc::frame::ENU enuCenter{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};
-            cc::earth::WGS centerWGS = cc::frame::to_wgs(enuCenter);
+            double top_left_lon = center_wgs.longitude - half_width_deg;
+            double top_left_lat = center_wgs.latitude + half_height_deg;
 
-            // Calculate top-left corner from center
-            double top_left_lon = centerWGS.longitude - half_width; // West of center
-            double top_left_lat = centerWGS.latitude + half_height; // North of center (top)
+            if (layerHasRotation[i]) {
+                // Write ModelTransformationTag (34264) - 4x4 affine transformation matrix
+                // Matrix format (row-major): [a b 0 d; e f 0 h; 0 0 1 0; 0 0 0 1]
+                // Where: a,b,e,f encode rotation+scale, d,h encode translation
+                //
+                // For GeoTIFF, the transformation is:
+                //   X_world = a * col + b * row + d
+                //   Y_world = e * col + f * row + h
+                //
+                // With rotation angle θ (yaw):
+                //   a = scale_x * cos(θ)
+                //   b = -scale_y * sin(θ)  (note: scale_y is positive, Y increases northward)
+                //   e = scale_x * sin(θ)
+                //   f = scale_y * cos(θ)
+                //   d = top_left_lon (adjusted for rotation)
+                //   h = top_left_lat (adjusted for rotation)
 
-            writeDouble(top_left_lon);       // X: longitude of top-left corner
-            writeDouble(top_left_lat);       // Y: latitude of top-left corner
-            writeDouble(centerWGS.altitude); // Z: altitude
+                writePos = transformOffsets[i];
+                double yaw = layer.shift.rotation.to_euler().yaw;
+                double cos_yaw = std::cos(yaw);
+                double sin_yaw = std::sin(yaw);
+
+                // For rotated grids, we need to compute the top-left corner after rotation
+                // The grid center stays the same, but corners rotate around it
+                // Top-left corner in unrotated grid is at (-W/2, +H/2) pixels from center
+                // After rotation: x' = x*cos - y*sin, y' = x*sin + y*cos
+                double half_w_pix = W / 2.0;
+                double half_h_pix = H / 2.0;
+
+                // Rotated top-left corner offset in pixels
+                double tl_col_offset = -half_w_pix * cos_yaw - half_h_pix * sin_yaw;
+                double tl_row_offset = -half_w_pix * sin_yaw + half_h_pix * cos_yaw;
+
+                // Convert to degrees and add to center
+                double rotated_tl_lon = center_wgs.longitude + tl_col_offset * scale_x;
+                double rotated_tl_lat = center_wgs.latitude + tl_row_offset * scale_y;
+
+                // Row 1: [a, b, 0, d]
+                writeDouble(scale_x * cos_yaw);  // a: X scale with rotation
+                writeDouble(-scale_y * sin_yaw); // b: Y contribution to X (rotation)
+                writeDouble(0.0);                // 0
+                writeDouble(rotated_tl_lon);     // d: X translation (top-left longitude)
+
+                // Row 2: [e, f, 0, h]
+                writeDouble(scale_x * sin_yaw); // e: X contribution to Y (rotation)
+                writeDouble(scale_y * cos_yaw); // f: Y scale with rotation (negative for south-down)
+                writeDouble(0.0);               // 0
+                writeDouble(rotated_tl_lat);    // h: Y translation (top-left latitude)
+
+                // Row 3: [0, 0, 1, 0]
+                writeDouble(0.0);
+                writeDouble(0.0);
+                writeDouble(1.0);
+                writeDouble(0.0);
+
+                // Row 4: [0, 0, 0, 1]
+                writeDouble(0.0);
+                writeDouble(0.0);
+                writeDouble(0.0);
+                writeDouble(1.0);
+            } else {
+                // Write ModelPixelScaleTag (33550) - 3 doubles: X, Y, Z scale
+                writePos = scaleOffsets[i];
+                writeDouble(scale_x);  // X scale in degrees (longitude, positive = eastward)
+                writeDouble(-scale_y); // Y scale in degrees (negative = rows increase southward)
+                writeDouble(0.0);      // Z scale
+
+                // Write ModelTiepointTag (33922) - 6 doubles: I, J, K, X, Y, Z
+                writePos = tiepointOffsets[i];
+                writeDouble(0.0);                 // I: pixel column 0 (left edge)
+                writeDouble(0.0);                 // J: pixel row 0 (top edge)
+                writeDouble(0.0);                 // K: always 0 for 2D
+                writeDouble(top_left_lon);        // X: longitude of top-left corner
+                writeDouble(top_left_lat);        // Y: latitude of top-left corner
+                writeDouble(center_wgs.altitude); // Z: altitude
+            }
 
             // Write custom tag data for this layer
             writePos = customDataOffsets[i];

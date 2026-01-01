@@ -1,6 +1,7 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
 #include "geotiv/geotiv.hpp"
+#include <cstring>
 #include <doctest/doctest.h>
 #include <filesystem>
 #include <fstream>
@@ -159,6 +160,133 @@ TEST_CASE("GeoTIFF Writer functionality") {
         CHECK(std::filesystem::file_size(testFile) > 0);
 
         // Clean up
+        std::filesystem::remove(testFile);
+    }
+
+    SUBCASE("Tag ordering is ascending (TIFF 6.0 compliance)") {
+        // Create a raster with custom tags that would be out of order if not sorted
+        size_t rows = 3, cols = 3;
+        double cellSize = 1.0;
+        dp::Geo datum{48.0, 11.0, 500.0};
+        dp::Pose shift{dp::Point{0, 0, 0}, dp::Quaternion::from_euler(0, 0, 0)};
+
+        auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{128});
+
+        geotiv::RasterCollection rc;
+        rc.datum = datum;
+        rc.shift = shift;
+        rc.resolution = cellSize;
+
+        geotiv::Layer layer;
+        layer.grid = std::move(grid);
+        layer.width = static_cast<uint32_t>(cols);
+        layer.height = static_cast<uint32_t>(rows);
+        layer.samplesPerPixel = 1;
+        layer.planarConfig = 1;
+        layer.datum = datum;
+        layer.shift = shift;
+        layer.resolution = cellSize;
+
+        // Add custom tags that would interleave with standard tags if sorted
+        layer.customTags[50001] = {100};      // After GeoTIFF tags
+        layer.customTags[300] = {200};        // Between standard tags (after 284, before 339)
+        layer.customTags[50000] = {300, 400}; // After GeoTIFF tags (multi-value)
+
+        rc.layers.push_back(std::move(layer));
+
+        auto bytes = geotiv::toTiffBytes(rc);
+
+        // Parse the IFD to verify tag ordering
+        // TIFF header: bytes 0-1 = byte order, 2-3 = magic, 4-7 = IFD offset
+        uint32_t ifdOffset = 0;
+        std::memcpy(&ifdOffset, &bytes[4], 4);
+
+        // Read number of entries
+        uint16_t numEntries = 0;
+        std::memcpy(&numEntries, &bytes[ifdOffset], 2);
+        CHECK(numEntries > 0);
+
+        // Verify tags are in ascending order
+        uint16_t prevTag = 0;
+        for (uint16_t e = 0; e < numEntries; ++e) {
+            size_t entryOffset = ifdOffset + 2 + e * 12;
+            uint16_t tag = 0;
+            std::memcpy(&tag, &bytes[entryOffset], 2);
+
+            CHECK(tag > prevTag); // Each tag must be greater than the previous
+            prevTag = tag;
+        }
+
+        // Verify specific ordering: 300 should come after 284 but before 339
+        // Find positions of tags 284, 300, 339
+        int pos284 = -1, pos300 = -1, pos339 = -1;
+        for (uint16_t e = 0; e < numEntries; ++e) {
+            size_t entryOffset = ifdOffset + 2 + e * 12;
+            uint16_t tag = 0;
+            std::memcpy(&tag, &bytes[entryOffset], 2);
+
+            if (tag == 284)
+                pos284 = e;
+            if (tag == 300)
+                pos300 = e;
+            if (tag == 339)
+                pos339 = e;
+        }
+
+        CHECK(pos284 >= 0);
+        CHECK(pos300 >= 0);
+        CHECK(pos339 >= 0);
+        CHECK(pos284 < pos300);
+        CHECK(pos300 < pos339);
+    }
+
+    SUBCASE("Custom tags with values are correctly written and readable") {
+        size_t rows = 3, cols = 3;
+        double cellSize = 1.0;
+        dp::Geo datum{48.0, 11.0, 500.0};
+        dp::Pose shift{dp::Point{0, 0, 0}, dp::Quaternion::from_euler(0, 0, 0)};
+
+        auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{64});
+
+        geotiv::RasterCollection rc;
+        rc.datum = datum;
+        rc.shift = shift;
+        rc.resolution = cellSize;
+
+        geotiv::Layer layer;
+        layer.grid = std::move(grid);
+        layer.width = static_cast<uint32_t>(cols);
+        layer.height = static_cast<uint32_t>(rows);
+        layer.samplesPerPixel = 1;
+        layer.planarConfig = 1;
+        layer.datum = datum;
+        layer.shift = shift;
+        layer.resolution = cellSize;
+
+        // Add custom tags
+        layer.customTags[50100] = {12345};
+        layer.customTags[50101] = {100, 200, 300};
+
+        rc.layers.push_back(std::move(layer));
+
+        std::string testFile = "test_custom_tags.tif";
+        geotiv::WriteRasterCollection(rc, testFile);
+
+        // Read back and verify custom tags
+        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        REQUIRE(rc2.layers.size() == 1);
+
+        // Custom tags should be preserved
+        CHECK(rc2.layers[0].customTags.count(50100) == 1);
+        CHECK(rc2.layers[0].customTags[50100].size() == 1);
+        CHECK(rc2.layers[0].customTags[50100][0] == 12345);
+
+        CHECK(rc2.layers[0].customTags.count(50101) == 1);
+        CHECK(rc2.layers[0].customTags[50101].size() == 3);
+        CHECK(rc2.layers[0].customTags[50101][0] == 100);
+        CHECK(rc2.layers[0].customTags[50101][1] == 200);
+        CHECK(rc2.layers[0].customTags[50101][2] == 300);
+
         std::filesystem::remove(testFile);
     }
 }
