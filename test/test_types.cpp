@@ -148,6 +148,27 @@ TEST_CASE("GridVariant type support") {
 
         CHECK(geotiv::get_grid_resolution(variant) == doctest::Approx(2.5));
     }
+
+    SUBCASE("RGBA grid") {
+        auto grid = dp::make_grid<geotiv::RGBA>(10, 10, 1.0, true, dp::Pose{}, geotiv::RGBA{});
+        grid(5, 5) = geotiv::RGBA{255, 128, 64, 200};
+        grid(6, 6) = geotiv::RGBA{0, 0, 0, 255};
+
+        geotiv::GridVariant variant = std::move(grid);
+
+        CHECK(geotiv::get_bits_per_sample(variant) == 8);
+        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::UnsignedInt);
+        CHECK(geotiv::get_samples_per_pixel(variant) == 4);
+        CHECK(geotiv::get_photometric_interpretation(variant) == geotiv::PhotometricInterpretation::RGB);
+        CHECK(geotiv::is_color_grid(variant));
+        CHECK(geotiv::holds_grid_type<geotiv::RGBA>(variant));
+
+        auto &g = geotiv::get_grid<geotiv::RGBA>(variant);
+        CHECK(g(5, 5).r == 255);
+        CHECK(g(5, 5).g == 128);
+        CHECK(g(5, 5).b == 64);
+        CHECK(g(5, 5).a == 200);
+    }
 }
 
 TEST_CASE("Layer GridVariant convenience methods") {
@@ -180,6 +201,26 @@ TEST_CASE("Layer GridVariant convenience methods") {
 
         auto *wrong = layer.gridIf<uint8_t>();
         CHECK(wrong == nullptr);
+    }
+
+    SUBCASE("Layer with RGBA grid") {
+        geotiv::Layer layer;
+        auto grid = dp::make_grid<geotiv::RGBA>(10, 10, 1.0, true, dp::Pose{}, geotiv::RGBA{255, 128, 64, 200});
+        layer.grid = std::move(grid);
+
+        CHECK(layer.bitsPerSample() == 8);
+        CHECK(layer.sampleFormat() == geotiv::SampleFormat::UnsignedInt);
+        CHECK(layer.photometricInterpretation() == geotiv::PhotometricInterpretation::RGB);
+        CHECK(layer.isColorLayer());
+        CHECK(layer.holdsType<geotiv::RGBA>());
+        CHECK_FALSE(layer.holdsType<uint8_t>());
+
+        auto *g = layer.gridIf<geotiv::RGBA>();
+        REQUIRE(g != nullptr);
+        CHECK((*g)(0, 0).r == 255);
+        CHECK((*g)(0, 0).g == 128);
+        CHECK((*g)(0, 0).b == 64);
+        CHECK((*g)(0, 0).a == 200);
     }
 }
 
@@ -406,6 +447,61 @@ TEST_CASE("Round-trip write/read for different grid types") {
         CHECK(g(0, 0) == -2147483648);
         CHECK(g(2, 2) == 0);
         CHECK(g(4, 4) == 2147483647);
+
+        std::filesystem::remove(testFile);
+    }
+
+    SUBCASE("RGBA round-trip") {
+        auto grid = dp::make_grid<geotiv::RGBA>(5, 5, resolution, true, shift, geotiv::RGBA{});
+        grid(0, 0) = geotiv::RGBA{255, 0, 0, 255};     // Red
+        grid(2, 2) = geotiv::RGBA{0, 255, 0, 128};     // Green with 50% alpha
+        grid(4, 4) = geotiv::RGBA{0, 0, 255, 0};       // Blue fully transparent
+        grid(1, 3) = geotiv::RGBA{128, 128, 128, 255}; // Gray
+
+        geotiv::RasterCollection rc;
+        rc.datum = datum;
+        rc.shift = shift;
+        rc.resolution = resolution;
+
+        geotiv::Layer layer;
+        layer.grid = std::move(grid);
+        layer.width = 5;
+        layer.height = 5;
+        layer.samplesPerPixel = 4; // RGBA
+        layer.planarConfig = 1;
+        layer.datum = datum;
+        layer.shift = shift;
+        layer.resolution = resolution;
+        rc.layers.push_back(std::move(layer));
+
+        std::string testFile = "test_rgba.tif";
+        geotiv::WriteRasterCollection(rc, testFile);
+
+        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        REQUIRE(rc2.layers.size() == 1);
+        CHECK(rc2.layers[0].holdsType<geotiv::RGBA>());
+        CHECK(rc2.layers[0].isColorLayer());
+
+        auto &g = rc2.layers[0].gridAs<geotiv::RGBA>();
+        CHECK(g(0, 0).r == 255);
+        CHECK(g(0, 0).g == 0);
+        CHECK(g(0, 0).b == 0);
+        CHECK(g(0, 0).a == 255);
+
+        CHECK(g(2, 2).r == 0);
+        CHECK(g(2, 2).g == 255);
+        CHECK(g(2, 2).b == 0);
+        CHECK(g(2, 2).a == 128);
+
+        CHECK(g(4, 4).r == 0);
+        CHECK(g(4, 4).g == 0);
+        CHECK(g(4, 4).b == 255);
+        CHECK(g(4, 4).a == 0);
+
+        CHECK(g(1, 3).r == 128);
+        CHECK(g(1, 3).g == 128);
+        CHECK(g(1, 3).b == 128);
+        CHECK(g(1, 3).a == 255);
 
         std::filesystem::remove(testFile);
     }

@@ -365,6 +365,10 @@ namespace geotiv {
                 sampleFormatValue = 1; // default: unsigned integer
             SampleFormat sampleFormat = static_cast<SampleFormat>(sampleFormatValue);
 
+            // Read PhotometricInterpretation tag (262) - defaults to 1 (BlackIsZero) if not present
+            uint32_t photometricValue = getUInt(262);
+            PhotometricInterpretation photometric = static_cast<PhotometricInterpretation>(photometricValue);
+
             // Validate supported bit depths
             if (bitsPerSample != 8 && bitsPerSample != 16 && bitsPerSample != 32 && bitsPerSample != 64) {
                 throw std::runtime_error("Unsupported bits per sample: " + std::to_string(bitsPerSample) +
@@ -593,8 +597,42 @@ namespace geotiv {
                 }
             };
 
-            // Create appropriate grid type based on bitsPerSample and sampleFormat
-            if (bitsPerSample == 8) {
+            // Create appropriate grid type based on bitsPerSample, sampleFormat, and photometric
+            // Check for RGB/RGBA images first (PhotometricInterpretation = 2)
+            if (photometric == PhotometricInterpretation::RGB && bitsPerSample == 8) {
+                // RGB or RGBA image - create RGBA grid
+                auto grid = dp::make_grid<RGBA>(L.height, L.width, L.resolution, true, shift, RGBA{});
+
+                if (L.planarConfig == 1) { // Chunky format (RGBRGB... or RGBARGBA...)
+                    size_t idx = 0;
+                    size_t bytesPerPixel = L.samplesPerPixel; // 3 for RGB, 4 for RGBA
+                    for (int32_t r = L.height - 1; r >= 0; --r) {
+                        for (uint32_t c = 0; c < L.width; ++c) {
+                            RGBA pixel;
+                            pixel.r = pix[idx];
+                            pixel.g = pix[idx + 1];
+                            pixel.b = pix[idx + 2];
+                            pixel.a = (L.samplesPerPixel >= 4) ? pix[idx + 3] : 255;
+                            grid(r, c) = pixel;
+                            idx += bytesPerPixel;
+                        }
+                    }
+                } else { // Planar format (RRR...GGG...BBB...AAA...)
+                    size_t planeSize = size_t(L.width) * L.height;
+                    for (int32_t r = L.height - 1; r >= 0; --r) {
+                        for (uint32_t c = 0; c < L.width; ++c) {
+                            size_t pixelIdx = size_t(L.height - 1 - r) * L.width + c;
+                            RGBA pixel;
+                            pixel.r = pix[pixelIdx];
+                            pixel.g = pix[planeSize + pixelIdx];
+                            pixel.b = pix[2 * planeSize + pixelIdx];
+                            pixel.a = (L.samplesPerPixel >= 4) ? pix[3 * planeSize + pixelIdx] : 255;
+                            grid(r, c) = pixel;
+                        }
+                    }
+                }
+                L.grid = std::move(grid);
+            } else if (bitsPerSample == 8) {
                 if (sampleFormat == SampleFormat::SignedInt) {
                     auto grid = dp::make_grid<int8_t>(L.height, L.width, L.resolution, true, shift, int8_t{0});
                     fillGrid(grid, 1);

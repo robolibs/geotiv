@@ -13,6 +13,7 @@ local LIB_DEPS = {
     {"optinum", "https://github.com/robolibs/optinum.git", "0.0.14"},
     {"graphix", "https://github.com/robolibs/graphix.git", "0.0.4"},
     {"concord", "https://github.com/robolibs/concord.git", "0.0.5"},
+    {"pigment", "https://github.com/robolibs/pigment.git", "0.0.3"},
 }
 local EXAMPLE_DEPS = {
     {system = "rerun_sdk"},

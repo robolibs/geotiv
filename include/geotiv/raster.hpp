@@ -26,6 +26,7 @@ namespace geotiv {
             : grid(g), name(layer_name), type(layer_type), properties(props) {}
 
         /// Constructor from GridVariant - extracts uint8_t grid or converts
+        /// Note: RGBA grids are converted to grayscale using luminance formula
         inline GridLayer(const GridVariant &gv, const std::string &layer_name, const std::string &layer_type = "",
                          const std::unordered_map<std::string, std::string> &props = {})
             : name(layer_name), type(layer_type), properties(props) {
@@ -41,11 +42,21 @@ namespace geotiv {
 
                 std::visit(
                     [this](const auto &g) {
+                        using GridType = std::decay_t<decltype(g)>;
+                        using T = grid_element_type_t<GridType>;
+
                         for (size_t r = 0; r < g.rows; ++r) {
                             for (size_t c = 0; c < g.cols; ++c) {
-                                // Clamp to uint8_t range
-                                auto val = static_cast<double>(g(r, c));
-                                grid(r, c) = static_cast<uint8_t>(std::clamp(val, 0.0, 255.0));
+                                if constexpr (std::is_same_v<T, RGBA>) {
+                                    // Convert RGBA to grayscale using luminance formula
+                                    const RGBA &rgba = g(r, c);
+                                    double lum = 0.299 * rgba.r + 0.587 * rgba.g + 0.114 * rgba.b;
+                                    grid(r, c) = static_cast<uint8_t>(std::clamp(lum, 0.0, 255.0));
+                                } else {
+                                    // Clamp scalar types to uint8_t range
+                                    auto val = static_cast<double>(g(r, c));
+                                    grid(r, c) = static_cast<uint8_t>(std::clamp(val, 0.0, 255.0));
+                                }
                             }
                         }
                     },
@@ -338,9 +349,19 @@ namespace geotiv {
             // Use std::visit to handle the grid variant
             std::visit(
                 [&](const auto &grid2d) {
+                    using GridType = std::decay_t<decltype(grid2d)>;
+                    using SrcT = grid_element_type_t<GridType>;
+
                     for (size_t r = 0; r < rows; ++r) {
                         for (size_t c = 0; c < cols; ++c) {
-                            layer3d(r, c, layerIdx) = static_cast<T>(grid2d(r, c));
+                            if constexpr (std::is_same_v<SrcT, RGBA>) {
+                                // Convert RGBA to scalar using luminance formula
+                                const RGBA &rgba = grid2d(r, c);
+                                double lum = 0.299 * rgba.r + 0.587 * rgba.g + 0.114 * rgba.b;
+                                layer3d(r, c, layerIdx) = static_cast<T>(lum);
+                            } else {
+                                layer3d(r, c, layerIdx) = static_cast<T>(grid2d(r, c));
+                            }
                         }
                     }
                 },

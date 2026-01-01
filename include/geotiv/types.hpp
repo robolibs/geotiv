@@ -11,8 +11,10 @@
 #include <vector>
 
 #include <datapod/datapod.hpp>
+#include <pigment/pigment.hpp>
 
 namespace dp = datapod;
+namespace pg = pigment;
 
 namespace geotiv {
 
@@ -59,6 +61,42 @@ namespace geotiv {
         Undefined = 4    // Undefined/untyped data
     };
 
+    /// PhotometricInterpretation values as defined in TIFF spec (tag 262)
+    enum class PhotometricInterpretation : uint16_t {
+        WhiteIsZero = 0, // Inverted grayscale (0 = white)
+        BlackIsZero = 1, // Standard grayscale (0 = black)
+        RGB = 2,         // RGB color image
+        Palette = 3,     // Palette/indexed color (requires ColorMap)
+        Mask = 4,        // Transparency mask
+        CMYK = 5,        // CMYK color
+        YCbCr = 6,       // YCbCr color (JPEG)
+        CIELab = 8       // CIE L*a*b* color
+    };
+
+    /// RGBA color type using pigment library
+    /// Stores R, G, B, A as uint8_t values (0-255)
+    struct RGBA {
+        uint8_t r = 0;
+        uint8_t g = 0;
+        uint8_t b = 0;
+        uint8_t a = 255;
+
+        RGBA() = default;
+        RGBA(uint8_t r_, uint8_t g_, uint8_t b_, uint8_t a_ = 255) : r(r_), g(g_), b(b_), a(a_) {}
+
+        /// Construct from pigment::RGB
+        explicit RGBA(const pg::RGB &rgb, uint8_t alpha = 255) : r(rgb.r()), g(rgb.g()), b(rgb.b()), a(alpha) {}
+
+        /// Convert to pigment::RGB
+        pg::RGB to_rgb() const { return pg::RGB(r, g, b); }
+
+        /// Check equality
+        bool operator==(const RGBA &other) const {
+            return r == other.r && g == other.g && b == other.b && a == other.a;
+        }
+        bool operator!=(const RGBA &other) const { return !(*this == other); }
+    };
+
     /// Variant type supporting all grid data types
     /// This allows a Layer to hold grids of different numeric types
     using GridVariant = std::variant<dp::Grid<uint8_t>,  // 8-bit unsigned (default)
@@ -68,7 +106,8 @@ namespace geotiv {
                                      dp::Grid<uint32_t>, // 32-bit unsigned (large counts)
                                      dp::Grid<int32_t>,  // 32-bit signed
                                      dp::Grid<float>,    // 32-bit float (scientific data)
-                                     dp::Grid<double>    // 64-bit float (high precision)
+                                     dp::Grid<double>,   // 64-bit float (high precision)
+                                     dp::Grid<RGBA>      // RGBA color (RGB/RGBA images)
                                      >;
 
     /// Helper trait to extract element type from Grid<T>
@@ -79,12 +118,17 @@ namespace geotiv {
     template <typename GridType> using grid_element_type_t = typename grid_element_type<GridType>::type;
 
     /// Get bits per sample for a grid variant
+    /// For RGBA grids, returns 8 (bits per channel)
     inline uint16_t get_bits_per_sample(const GridVariant &grid) {
         return std::visit(
             [](const auto &g) -> uint16_t {
                 using GridType = std::decay_t<decltype(g)>;
                 using T = grid_element_type_t<GridType>;
-                return static_cast<uint16_t>(sizeof(T) * 8);
+                if constexpr (std::is_same_v<T, RGBA>) {
+                    return 8; // 8 bits per channel
+                } else {
+                    return static_cast<uint16_t>(sizeof(T) * 8);
+                }
             },
             grid);
     }
@@ -95,7 +139,9 @@ namespace geotiv {
             [](const auto &g) -> SampleFormat {
                 using GridType = std::decay_t<decltype(g)>;
                 using T = grid_element_type_t<GridType>;
-                if constexpr (std::is_floating_point_v<T>) {
+                if constexpr (std::is_same_v<T, RGBA>) {
+                    return SampleFormat::UnsignedInt; // RGBA uses unsigned 8-bit per channel
+                } else if constexpr (std::is_floating_point_v<T>) {
                     return SampleFormat::Float;
                 } else if constexpr (std::is_signed_v<T>) {
                     return SampleFormat::SignedInt;
@@ -105,6 +151,40 @@ namespace geotiv {
             },
             grid);
     }
+
+    /// Get samples per pixel for a grid variant
+    /// Returns 4 for RGBA, 1 for scalar types
+    inline uint16_t get_samples_per_pixel(const GridVariant &grid) {
+        return std::visit(
+            [](const auto &g) -> uint16_t {
+                using GridType = std::decay_t<decltype(g)>;
+                using T = grid_element_type_t<GridType>;
+                if constexpr (std::is_same_v<T, RGBA>) {
+                    return 4; // R, G, B, A
+                } else {
+                    return 1; // Single channel
+                }
+            },
+            grid);
+    }
+
+    /// Get photometric interpretation for a grid variant
+    inline PhotometricInterpretation get_photometric_interpretation(const GridVariant &grid) {
+        return std::visit(
+            [](const auto &g) -> PhotometricInterpretation {
+                using GridType = std::decay_t<decltype(g)>;
+                using T = grid_element_type_t<GridType>;
+                if constexpr (std::is_same_v<T, RGBA>) {
+                    return PhotometricInterpretation::RGB;
+                } else {
+                    return PhotometricInterpretation::BlackIsZero;
+                }
+            },
+            grid);
+    }
+
+    /// Check if grid is a color (RGBA) grid
+    inline bool is_color_grid(const GridVariant &grid) { return std::holds_alternative<dp::Grid<RGBA>>(grid); }
 
     /// Get grid dimensions (rows, cols)
     inline std::pair<size_t, size_t> get_grid_dimensions(const GridVariant &grid) {
@@ -203,6 +283,14 @@ namespace geotiv {
 
         /// Get sample format for this layer's grid
         inline SampleFormat sampleFormat() const { return get_sample_format(grid); }
+
+        /// Get photometric interpretation for this layer's grid
+        inline PhotometricInterpretation photometricInterpretation() const {
+            return get_photometric_interpretation(grid);
+        }
+
+        /// Check if this layer contains color (RGBA) data
+        inline bool isColorLayer() const { return is_color_grid(grid); }
 
         /// Check if grid holds a specific type
         template <typename T> inline bool holdsType() const { return holds_grid_type<T>(grid); }

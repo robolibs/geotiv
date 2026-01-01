@@ -79,13 +79,17 @@ namespace geotiv {
         std::vector<uint32_t> stripCounts(N), stripOffsets(N);
         std::vector<uint16_t> bitsPerSample(N);
         std::vector<SampleFormat> sampleFormats(N);
+        std::vector<uint16_t> samplesPerPixel(N);
+        std::vector<PhotometricInterpretation> photometricInterp(N);
 
         for (size_t i = 0; i < N; ++i) {
             auto const &layer = rc.layers[i];
 
-            // Get bits per sample and sample format from the grid variant
+            // Get bits per sample, sample format, samples per pixel, and photometric from the grid variant
             bitsPerSample[i] = get_bits_per_sample(layer.grid);
             sampleFormats[i] = get_sample_format(layer.grid);
+            samplesPerPixel[i] = get_samples_per_pixel(layer.grid);
+            photometricInterp[i] = get_photometric_interpretation(layer.grid);
 
             // Use std::visit to handle all grid types
             std::visit(
@@ -95,21 +99,41 @@ namespace geotiv {
 
                     uint32_t W = static_cast<uint32_t>(g.cols);
                     uint32_t H = static_cast<uint32_t>(g.rows);
-                    uint32_t S = layer.samplesPerPixel > 0 ? layer.samplesPerPixel : 1;
-                    size_t bytesPerSample = sizeof(T);
-                    size_t sz = size_t(W) * H * S * bytesPerSample;
 
-                    strips[i].resize(sz);
-                    stripCounts[i] = static_cast<uint32_t>(sz);
+                    if constexpr (std::is_same_v<T, RGBA>) {
+                        // RGBA grid: write 4 bytes per pixel (R, G, B, A)
+                        size_t sz = size_t(W) * H * 4;
+                        strips[i].resize(sz);
+                        stripCounts[i] = static_cast<uint32_t>(sz);
 
-                    // Fill chunky: band0,band1,... per pixel
-                    // Flip vertically: write bottom row first to match GeoTIFF coordinate system
-                    size_t idx = 0;
-                    for (int32_t r = H - 1; r >= 0; --r) {
-                        for (uint32_t c = 0; c < W; ++c) {
-                            T v = g(r, c);
-                            for (uint32_t s = 0; s < S; ++s) {
-                                write_le<T>(strips[i], idx, v);
+                        size_t idx = 0;
+                        for (int32_t r = H - 1; r >= 0; --r) {
+                            for (uint32_t c = 0; c < W; ++c) {
+                                const RGBA &v = g(r, c);
+                                strips[i][idx++] = v.r;
+                                strips[i][idx++] = v.g;
+                                strips[i][idx++] = v.b;
+                                strips[i][idx++] = v.a;
+                            }
+                        }
+                    } else {
+                        // Scalar grid: write single value per pixel
+                        uint32_t S = layer.samplesPerPixel > 0 ? layer.samplesPerPixel : 1;
+                        size_t bytesPerSample = sizeof(T);
+                        size_t sz = size_t(W) * H * S * bytesPerSample;
+
+                        strips[i].resize(sz);
+                        stripCounts[i] = static_cast<uint32_t>(sz);
+
+                        // Fill chunky: band0,band1,... per pixel
+                        // Flip vertically: write bottom row first to match GeoTIFF coordinate system
+                        size_t idx = 0;
+                        for (int32_t r = H - 1; r >= 0; --r) {
+                            for (uint32_t c = 0; c < W; ++c) {
+                                T v = g(r, c);
+                                for (uint32_t s = 0; s < S; ++s) {
+                                    write_le<T>(strips[i], idx, v);
+                                }
                             }
                         }
                     }
@@ -162,8 +186,11 @@ namespace geotiv {
         for (size_t i = 0; i < N; ++i) {
             // Base tags: 9 standard + ImageDescription + PlanarConfig + SampleFormat + GeoKeyDirectory + custom tags
             // Plus either (ModelPixelScale + ModelTiepoint) OR ModelTransformation
-            uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2; // 1 for transform, 2 for scale+tiepoint
-            entryCounts[i] = 9 + 1 + 1 + 1 + 1 + geoTagCount + static_cast<uint16_t>(rc.layers[i].customTags.size());
+            // Plus ExtraSamples tag if RGBA (4 samples per pixel)
+            uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2;          // 1 for transform, 2 for scale+tiepoint
+            uint16_t extraSamplesTag = (samplesPerPixel[i] > 3) ? 1 : 0; // ExtraSamples for alpha channel
+            entryCounts[i] = 9 + 1 + 1 + 1 + 1 + geoTagCount + extraSamplesTag +
+                             static_cast<uint16_t>(rc.layers[i].customTags.size());
 
             // Calculate space needed for multi-value custom tag data
             customDataSizes[i] = 0;
@@ -262,25 +289,33 @@ namespace geotiv {
             auto [rows, cols] = get_grid_dimensions(layer.grid);
             uint32_t W = static_cast<uint32_t>(cols);
             uint32_t H = static_cast<uint32_t>(rows);
-            uint32_t S = layer.samplesPerPixel > 0 ? layer.samplesPerPixel : 1;
+            uint32_t S = samplesPerPixel[i]; // Use computed samples per pixel (4 for RGBA, 1 for scalar)
             uint32_t PC = layer.planarConfig > 0 ? layer.planarConfig : 1;
+            uint32_t PI = static_cast<uint32_t>(photometricInterp[i]); // PhotometricInterpretation
 
             // Collect all tags into a vector for sorting
             std::vector<IfdEntry> entries;
             entries.reserve(entryCounts[i]);
 
             // Standard TIFF tags
-            entries.push_back({256, 4, 1, W});                                       // ImageWidth
-            entries.push_back({257, 4, 1, H});                                       // ImageLength
-            entries.push_back({258, 3, 1, bitsPerSample[i]});                        // BitsPerSample
-            entries.push_back({259, 3, 1, 1});                                       // Compression (uncompressed)
-            entries.push_back({262, 3, 1, 1});                                       // PhotometricInterpretation
-            entries.push_back({270, 2, descLengths[i], descOffsets[i]});             // ImageDescription
-            entries.push_back({273, 4, 1, stripOffsets[i]});                         // StripOffsets
-            entries.push_back({277, 3, 1, S});                                       // SamplesPerPixel
-            entries.push_back({278, 4, 1, H});                                       // RowsPerStrip
-            entries.push_back({279, 4, 1, stripCounts[i]});                          // StripByteCounts
-            entries.push_back({284, 3, 1, PC});                                      // PlanarConfiguration
+            entries.push_back({256, 4, 1, W});                           // ImageWidth
+            entries.push_back({257, 4, 1, H});                           // ImageLength
+            entries.push_back({258, 3, 1, bitsPerSample[i]});            // BitsPerSample
+            entries.push_back({259, 3, 1, 1});                           // Compression (uncompressed)
+            entries.push_back({262, 3, 1, PI});                          // PhotometricInterpretation
+            entries.push_back({270, 2, descLengths[i], descOffsets[i]}); // ImageDescription
+            entries.push_back({273, 4, 1, stripOffsets[i]});             // StripOffsets
+            entries.push_back({277, 3, 1, S});                           // SamplesPerPixel
+            entries.push_back({278, 4, 1, H});                           // RowsPerStrip
+            entries.push_back({279, 4, 1, stripCounts[i]});              // StripByteCounts
+            entries.push_back({284, 3, 1, PC});                          // PlanarConfiguration
+
+            // ExtraSamples tag (338) for RGBA - indicates alpha channel type
+            // Value 2 = Unassociated alpha (not pre-multiplied)
+            if (S > 3) {
+                entries.push_back({338, 3, 1, 2}); // ExtraSamples: unassociated alpha
+            }
+
             entries.push_back({339, 3, 1, static_cast<uint32_t>(sampleFormats[i])}); // SampleFormat
 
             // GeoTIFF tags - use either Scale+Tiepoint or Transformation based on rotation
