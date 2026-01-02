@@ -192,6 +192,13 @@ namespace geotiv {
         std::vector<std::string> descriptions(N);
         std::vector<uint32_t> descLengths(N);
         std::vector<uint32_t> descOffsets(N);
+        std::vector<uint32_t> softwareOffsets(N);
+        uint32_t softwareLength = static_cast<uint32_t>(options.software.size() + 1);
+        std::vector<uint32_t> datetimeOffsets(N);
+        std::string datetime = options.datetime.empty() ? get_current_datetime() : options.datetime;
+        uint32_t datetimeLength = static_cast<uint32_t>(datetime.size() + 1);
+        std::vector<uint32_t> xresolutionOffsets(N);
+        std::vector<uint32_t> yresolutionOffsets(N);
         std::vector<uint32_t> scaleOffsets(N);
         std::vector<uint32_t> geoKeyOffsets(N);
         std::vector<uint32_t> tiepointOffsets(N);
@@ -223,13 +230,17 @@ namespace geotiv {
         std::vector<uint32_t> customDataSizes(N);
 
         for (size_t i = 0; i < N; ++i) {
-            // Base tags: 9 standard + ImageDescription + PlanarConfig + SampleFormat + GeoKeyDirectory + custom tags
-            // Plus either (ModelPixelScale + ModelTiepoint) OR ModelTransformation
-            // Plus ExtraSamples tag if RGBA (4 samples per pixel)
+            // Standard TIFF tags: 16 (Width, Length, BitsPerSample, Compression, Photometric, ImageDescription,
+            //                         StripOffsets, SamplesPerPixel, RowsPerStrip, StripByteCounts,
+            //                         XResolution, YResolution, PlanarConfig, ResolutionUnit, Software, DateTime)
+            // Plus: SampleFormat (1) + GeoKeyDirectory (1)
+            // Plus either: ModelTransformation (1) OR ModelPixelScale+ModelTiepoint (2)
+            // Plus optional: ExtraSamples (1 if RGBA)
+            // Plus: custom tags
             uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2;          // 1 for transform, 2 for scale+tiepoint
             uint16_t extraSamplesTag = (samplesPerPixel[i] > 3) ? 1 : 0; // ExtraSamples for alpha channel
-            entryCounts[i] = 9 + 1 + 1 + 1 + 1 + geoTagCount + extraSamplesTag +
-                             static_cast<uint16_t>(rc.layers[i].customTags.size());
+            entryCounts[i] =
+                16 + 1 + 1 + geoTagCount + extraSamplesTag + static_cast<uint16_t>(rc.layers[i].customTags.size());
 
             // Calculate space needed for multi-value custom tag data
             customDataSizes[i] = 0;
@@ -256,6 +267,18 @@ namespace geotiv {
         for (size_t i = 0; i < N; ++i) {
             descOffsets[i] = p;
             p += descLengths[i];
+
+            softwareOffsets[i] = p;
+            p += softwareLength;
+
+            datetimeOffsets[i] = p;
+            p += datetimeLength;
+
+            xresolutionOffsets[i] = p;
+            p += 8; // RATIONAL = 2 LONGs = 8 bytes
+
+            yresolutionOffsets[i] = p;
+            p += 8; // RATIONAL = 2 LONGs = 8 bytes
 
             geoKeyOffsets[i] = p;
             p += 40; // GeoKeyDirectory = 40 bytes (header:8 + 4 keys×8 = 40)
@@ -337,17 +360,22 @@ namespace geotiv {
             entries.reserve(entryCounts[i]);
 
             // Standard TIFF tags
-            entries.push_back({256, 4, 1, W});                           // ImageWidth
-            entries.push_back({257, 4, 1, H});                           // ImageLength
-            entries.push_back({258, 3, 1, bitsPerSample[i]});            // BitsPerSample
-            entries.push_back({259, 3, 1, 1});                           // Compression (1 = None)
-            entries.push_back({262, 3, 1, PI});                          // PhotometricInterpretation
-            entries.push_back({270, 2, descLengths[i], descOffsets[i]}); // ImageDescription
-            entries.push_back({273, 4, 1, stripOffsets[i]});             // StripOffsets
-            entries.push_back({277, 3, 1, S});                           // SamplesPerPixel
-            entries.push_back({278, 4, 1, H});                           // RowsPerStrip
-            entries.push_back({279, 4, 1, stripCounts[i]});              // StripByteCounts
-            entries.push_back({284, 3, 1, PC});                          // PlanarConfiguration
+            entries.push_back({256, 4, 1, W});                               // ImageWidth
+            entries.push_back({257, 4, 1, H});                               // ImageLength
+            entries.push_back({258, 3, 1, bitsPerSample[i]});                // BitsPerSample
+            entries.push_back({259, 3, 1, 1});                               // Compression (1 = None)
+            entries.push_back({262, 3, 1, PI});                              // PhotometricInterpretation
+            entries.push_back({270, 2, descLengths[i], descOffsets[i]});     // ImageDescription
+            entries.push_back({273, 4, 1, stripOffsets[i]});                 // StripOffsets
+            entries.push_back({277, 3, 1, S});                               // SamplesPerPixel
+            entries.push_back({278, 4, 1, H});                               // RowsPerStrip
+            entries.push_back({279, 4, 1, stripCounts[i]});                  // StripByteCounts
+            entries.push_back({282, 5, 1, xresolutionOffsets[i]});           // XResolution (RATIONAL)
+            entries.push_back({283, 5, 1, yresolutionOffsets[i]});           // YResolution (RATIONAL)
+            entries.push_back({284, 3, 1, PC});                              // PlanarConfiguration
+            entries.push_back({296, 3, 1, options.resolution_unit});         // ResolutionUnit
+            entries.push_back({305, 2, softwareLength, softwareOffsets[i]}); // Software
+            entries.push_back({306, 2, datetimeLength, datetimeOffsets[i]}); // DateTime
 
             // ExtraSamples tag (338) for RGBA - indicates alpha channel type
             // Value 2 = Unassociated alpha (not pre-multiplied)
@@ -411,6 +439,26 @@ namespace geotiv {
             writePos = descOffsets[i];
             std::memcpy(&buf[writePos], descriptions[i].data(), descriptions[i].size());
             buf[writePos + descriptions[i].size()] = '\0';
+
+            // Software text + NUL
+            writePos = softwareOffsets[i];
+            std::memcpy(&buf[writePos], options.software.data(), options.software.size());
+            buf[writePos + options.software.size()] = '\0';
+
+            // DateTime text + NUL
+            writePos = datetimeOffsets[i];
+            std::memcpy(&buf[writePos], datetime.data(), datetime.size());
+            buf[writePos + datetime.size()] = '\0';
+
+            // XResolution RATIONAL (numerator, denominator)
+            writePos = xresolutionOffsets[i];
+            writeLE32(options.xresolution_num);
+            writeLE32(options.xresolution_den);
+
+            // YResolution RATIONAL (numerator, denominator)
+            writePos = yresolutionOffsets[i];
+            writeLE32(options.yresolution_num);
+            writeLE32(options.yresolution_den);
 
             // GeoKeyDirectory for this layer (always WGS84)
             writePos = geoKeyOffsets[i];
