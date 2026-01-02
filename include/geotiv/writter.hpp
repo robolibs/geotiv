@@ -60,15 +60,21 @@ namespace geotiv {
         write_le(buf, pos, bits);
     }
 
+    /// Write options for GeoTIFF output
+    struct WriteOptions {
+        // No compression options - only uncompressed TIFF supported
+    };
+
     /// Write out all layers in rc as a chained-IFD GeoTIFF.
     /// Each IFD can have its own CRS/DATUM/HEADING/PixelScale and custom tags.
     /// Supports multiple data types: uint8, int8, uint16, int16, uint32, int32, float, double
+    /// Only uncompressed TIFF is supported
     ///
     /// CRS Flavor Handling:
     /// - ENU flavor: Grid data is already in local space, datum provides reference
     /// - WGS flavor: Grid data represents WGS coordinates, datum provides reference
     /// The Grid object contains the appropriate coordinate system based on parsing
-    inline std::vector<uint8_t> toTiffBytes(RasterCollection const &rc) {
+    inline std::vector<uint8_t> toTiffBytes(RasterCollection const &rc, const WriteOptions &options = WriteOptions{}) {
         size_t N = rc.layers.size();
         if (N == 0)
             throw std::runtime_error("toTiffBytes(): no layers");
@@ -81,6 +87,8 @@ namespace geotiv {
         std::vector<SampleFormat> sampleFormats(N);
         std::vector<uint16_t> samplesPerPixel(N);
         std::vector<PhotometricInterpretation> photometricInterp(N);
+
+        // No compression support - data is stored uncompressed
 
         for (size_t i = 0; i < N; ++i) {
             auto const &layer = rc.layers[i];
@@ -100,20 +108,21 @@ namespace geotiv {
                     uint32_t W = static_cast<uint32_t>(g.cols);
                     uint32_t H = static_cast<uint32_t>(g.rows);
 
+                    std::vector<uint8_t> rawData;
+
                     if constexpr (std::is_same_v<T, RGBA>) {
                         // RGBA grid: write 4 bytes per pixel (R, G, B, A)
                         size_t sz = size_t(W) * H * 4;
-                        strips[i].resize(sz);
-                        stripCounts[i] = static_cast<uint32_t>(sz);
+                        rawData.resize(sz);
 
                         size_t idx = 0;
                         for (int32_t r = H - 1; r >= 0; --r) {
                             for (uint32_t c = 0; c < W; ++c) {
                                 const RGBA &v = g(r, c);
-                                strips[i][idx++] = v.r;
-                                strips[i][idx++] = v.g;
-                                strips[i][idx++] = v.b;
-                                strips[i][idx++] = v.a;
+                                rawData[idx++] = v.r;
+                                rawData[idx++] = v.g;
+                                rawData[idx++] = v.b;
+                                rawData[idx++] = v.a;
                             }
                         }
                     } else {
@@ -122,8 +131,7 @@ namespace geotiv {
                         size_t bytesPerSample = sizeof(T);
                         size_t sz = size_t(W) * H * S * bytesPerSample;
 
-                        strips[i].resize(sz);
-                        stripCounts[i] = static_cast<uint32_t>(sz);
+                        rawData.resize(sz);
 
                         // Fill chunky: band0,band1,... per pixel
                         // Flip vertically: write bottom row first to match GeoTIFF coordinate system
@@ -132,11 +140,16 @@ namespace geotiv {
                             for (uint32_t c = 0; c < W; ++c) {
                                 T v = g(r, c);
                                 for (uint32_t s = 0; s < S; ++s) {
-                                    write_le<T>(strips[i], idx, v);
+                                    write_le<T>(rawData, idx, v);
                                 }
                             }
                         }
                     }
+
+                    // Store uncompressed data directly
+                    strips[i] = std::move(rawData);
+
+                    stripCounts[i] = static_cast<uint32_t>(strips[i].size());
                 },
                 layer.grid);
         }
@@ -301,7 +314,7 @@ namespace geotiv {
             entries.push_back({256, 4, 1, W});                           // ImageWidth
             entries.push_back({257, 4, 1, H});                           // ImageLength
             entries.push_back({258, 3, 1, bitsPerSample[i]});            // BitsPerSample
-            entries.push_back({259, 3, 1, 1});                           // Compression (uncompressed)
+            entries.push_back({259, 3, 1, 1});                           // Compression (1 = None)
             entries.push_back({262, 3, 1, PI});                          // PhotometricInterpretation
             entries.push_back({270, 2, descLengths[i], descOffsets[i]}); // ImageDescription
             entries.push_back({273, 4, 1, stripOffsets[i]});             // StripOffsets
@@ -528,8 +541,12 @@ namespace geotiv {
     }
 
     /// Write a multi-IFD GeoTIFF to disk
-    inline void WriteRasterCollection(RasterCollection const &rc, fs::path const &outPath) {
-        auto bytes = toTiffBytes(rc);
+    /// @param rc RasterCollection to write
+    /// @param outPath Output file path
+    /// @param options Write options (compression, predictor, etc.)
+    inline void WriteRasterCollection(RasterCollection const &rc, fs::path const &outPath,
+                                      const WriteOptions &options = WriteOptions{}) {
+        auto bytes = toTiffBytes(rc, options);
         std::ofstream ofs(outPath, std::ios::binary);
         if (!ofs)
             throw std::runtime_error("cannot open " + outPath.string());

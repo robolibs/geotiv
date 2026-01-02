@@ -375,6 +375,8 @@ namespace geotiv {
                                          ". Supported: 8, 16, 32, 64");
             }
 
+            // Compression and Predictor tags are ignored (not supported)
+
             L.stripOffsets = readUInts(273);    // StripOffsets
             L.stripByteCounts = readUInts(279); // StripByteCounts
 
@@ -391,20 +393,23 @@ namespace geotiv {
 
             size_t bytesPerSample = bitsPerSample / 8;
             size_t expectedBytes = size_t(L.width) * L.height * L.samplesPerPixel * bytesPerSample;
+
+            // Verify size matches (only uncompressed data supported)
             if (totalBytes != expectedBytes) {
                 throw std::runtime_error("Strip byte count mismatch: expected " + std::to_string(expectedBytes) +
                                          ", got " + std::to_string(totalBytes));
             }
 
+            // Read strip data
             std::vector<uint8_t> pix(totalBytes);
-            size_t pixOffset = 0;
+            size_t offset = 0;
 
             for (size_t i = 0; i < L.stripOffsets.size(); ++i) {
                 f.seekg(L.stripOffsets[i], std::ios::beg);
-                f.read(reinterpret_cast<char *>(pix.data() + pixOffset), L.stripByteCounts[i]);
+                f.read(reinterpret_cast<char *>(pix.data() + offset), L.stripByteCounts[i]);
                 if (f.gcount() != static_cast<std::streamsize>(L.stripByteCounts[i]))
                     throw std::runtime_error("Failed to read strip data");
-                pixOffset += L.stripByteCounts[i];
+                offset += L.stripByteCounts[i];
             }
 
             // Parse geotags for each IFD independently (always WGS84)
