@@ -199,6 +199,10 @@ namespace geotiv {
         uint32_t datetimeLength = static_cast<uint32_t>(datetime.size() + 1);
         std::vector<uint32_t> xresolutionOffsets(N);
         std::vector<uint32_t> yresolutionOffsets(N);
+        std::vector<std::string> noDataStrings(N);
+        std::vector<uint32_t> noDataLengths(N);
+        std::vector<uint32_t> noDataOffsets(N);
+        std::vector<bool> layerHasNoData(N);
         std::vector<uint32_t> scaleOffsets(N);
         std::vector<uint32_t> geoKeyOffsets(N);
         std::vector<uint32_t> tiepointOffsets(N);
@@ -222,6 +226,16 @@ namespace geotiv {
             }
 
             descLengths[i] = uint32_t(descriptions[i].size() + 1);
+
+            // Prepare NoData string if present (GDAL_NODATA tag 42113)
+            if (layer.noDataValue.has_value()) {
+                noDataStrings[i] = std::to_string(layer.noDataValue.value());
+                noDataLengths[i] = static_cast<uint32_t>(noDataStrings[i].size() + 1);
+                layerHasNoData[i] = true;
+            } else {
+                layerHasNoData[i] = false;
+                noDataLengths[i] = 0;
+            }
         }
 
         // --- 4) Compute IFD offsets and sizes ---
@@ -235,12 +249,13 @@ namespace geotiv {
             //                         XResolution, YResolution, PlanarConfig, ResolutionUnit, Software, DateTime)
             // Plus: SampleFormat (1) + GeoKeyDirectory (1)
             // Plus either: ModelTransformation (1) OR ModelPixelScale+ModelTiepoint (2)
-            // Plus optional: ExtraSamples (1 if RGBA)
+            // Plus optional: ExtraSamples (1 if RGBA), NoData (1 if present)
             // Plus: custom tags
             uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2;          // 1 for transform, 2 for scale+tiepoint
             uint16_t extraSamplesTag = (samplesPerPixel[i] > 3) ? 1 : 0; // ExtraSamples for alpha channel
-            entryCounts[i] =
-                16 + 1 + 1 + geoTagCount + extraSamplesTag + static_cast<uint16_t>(rc.layers[i].customTags.size());
+            uint16_t noDataTag = layerHasNoData[i] ? 1 : 0;              // GDAL_NODATA tag if present
+            entryCounts[i] = 16 + 1 + 1 + geoTagCount + extraSamplesTag + noDataTag +
+                             static_cast<uint16_t>(rc.layers[i].customTags.size());
 
             // Calculate space needed for multi-value custom tag data
             customDataSizes[i] = 0;
@@ -279,6 +294,11 @@ namespace geotiv {
 
             yresolutionOffsets[i] = p;
             p += 8; // RATIONAL = 2 LONGs = 8 bytes
+
+            if (layerHasNoData[i]) {
+                noDataOffsets[i] = p;
+                p += noDataLengths[i];
+            }
 
             geoKeyOffsets[i] = p;
             p += 40; // GeoKeyDirectory = 40 bytes (header:8 + 4 keys×8 = 40)
@@ -396,6 +416,11 @@ namespace geotiv {
             }
             entries.push_back({34735, 3, 20, geoKeyOffsets[i]}); // GeoKeyDirectoryTag
 
+            // GDAL_NODATA tag (42113) if present
+            if (layerHasNoData[i]) {
+                entries.push_back({42113, 2, noDataLengths[i], noDataOffsets[i]}); // GDAL_NODATA
+            }
+
             // Custom tags
             uint32_t customDataPos = customDataOffsets[i];
             for (const auto &[tag, values] : layer.customTags) {
@@ -459,6 +484,13 @@ namespace geotiv {
             writePos = yresolutionOffsets[i];
             writeLE32(options.yresolution_num);
             writeLE32(options.yresolution_den);
+
+            // NoData string + NUL (if present)
+            if (layerHasNoData[i]) {
+                writePos = noDataOffsets[i];
+                std::memcpy(&buf[writePos], noDataStrings[i].data(), noDataStrings[i].size());
+                buf[writePos + noDataStrings[i].size()] = '\0';
+            }
 
             // GeoKeyDirectory for this layer (always WGS84)
             writePos = geoKeyOffsets[i];

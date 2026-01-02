@@ -519,6 +519,17 @@ namespace geotiv {
             L.resolution = layerResolution;
             L.imageDescription = layerDescription;
 
+            // Read GDAL_NODATA tag (42113) if present
+            auto itNoData = E.find(42113);
+            if (itNoData != E.end() && itNoData->second.type == 2) {
+                std::string noDataStr = detail::readString(f, itNoData->second.valueOffset, itNoData->second.count);
+                try {
+                    L.noDataValue = std::stod(noDataStr);
+                } catch (...) {
+                    // Invalid nodata value, ignore
+                }
+            }
+
             // Read custom tags (tag numbers 50000 and above are typically custom)
             for (const auto &[tag, entry] : E) {
                 if (tag >= 50000) {

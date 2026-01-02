@@ -275,6 +275,9 @@ namespace geotiv {
         std::string imageDescription;
         std::map<uint16_t, std::vector<uint32_t>> customTags;
 
+        /// NoData value (optional) - indicates missing/invalid pixels
+        std::optional<double> noDataValue;
+
         /// Grid data - supports multiple numeric types via variant
         GridVariant grid;
 
