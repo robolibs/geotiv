@@ -278,6 +278,11 @@ namespace geotiv {
         /// NoData value (optional) - indicates missing/invalid pixels
         std::optional<double> noDataValue;
 
+        /// GeoTIFF ASCII parameters (optional) - stores string GeoKey values
+        /// Multiple strings are separated by pipe (|) character
+        /// Used for citation strings like GTCitationGeoKey, GeogCitationGeoKey
+        std::string geoAsciiParams;
+
         /// Grid data - supports multiple numeric types via variant
         GridVariant grid;
 

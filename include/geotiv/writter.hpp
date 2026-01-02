@@ -203,6 +203,9 @@ namespace geotiv {
         std::vector<uint32_t> noDataLengths(N);
         std::vector<uint32_t> noDataOffsets(N);
         std::vector<bool> layerHasNoData(N);
+        std::vector<uint32_t> geoAsciiParamsOffsets(N);
+        std::vector<uint32_t> geoAsciiParamsLengths(N);
+        std::vector<bool> layerHasGeoAsciiParams(N);
         std::vector<uint32_t> scaleOffsets(N);
         std::vector<uint32_t> geoKeyOffsets(N);
         std::vector<uint32_t> tiepointOffsets(N);
@@ -236,6 +239,16 @@ namespace geotiv {
                 layerHasNoData[i] = false;
                 noDataLengths[i] = 0;
             }
+
+            // Prepare GeoAsciiParams if present (tag 34737)
+            if (!layer.geoAsciiParams.empty()) {
+                geoAsciiParamsLengths[i] =
+                    static_cast<uint32_t>(layer.geoAsciiParams.size() + 1); // +1 for null terminator
+                layerHasGeoAsciiParams[i] = true;
+            } else {
+                layerHasGeoAsciiParams[i] = false;
+                geoAsciiParamsLengths[i] = 0;
+            }
         }
 
         // --- 4) Compute IFD offsets and sizes ---
@@ -249,12 +262,13 @@ namespace geotiv {
             //                         XResolution, YResolution, PlanarConfig, ResolutionUnit, Software, DateTime)
             // Plus: SampleFormat (1) + GeoKeyDirectory (1)
             // Plus either: ModelTransformation (1) OR ModelPixelScale+ModelTiepoint (2)
-            // Plus optional: ExtraSamples (1 if RGBA), NoData (1 if present)
+            // Plus optional: ExtraSamples (1 if RGBA), NoData (1 if present), GeoAsciiParams (1 if present)
             // Plus: custom tags
-            uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2;          // 1 for transform, 2 for scale+tiepoint
-            uint16_t extraSamplesTag = (samplesPerPixel[i] > 3) ? 1 : 0; // ExtraSamples for alpha channel
-            uint16_t noDataTag = layerHasNoData[i] ? 1 : 0;              // GDAL_NODATA tag if present
-            entryCounts[i] = 16 + 1 + 1 + geoTagCount + extraSamplesTag + noDataTag +
+            uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2;             // 1 for transform, 2 for scale+tiepoint
+            uint16_t extraSamplesTag = (samplesPerPixel[i] > 3) ? 1 : 0;    // ExtraSamples for alpha channel
+            uint16_t noDataTag = layerHasNoData[i] ? 1 : 0;                 // GDAL_NODATA tag if present
+            uint16_t geoAsciiParamsTag = layerHasGeoAsciiParams[i] ? 1 : 0; // GeoAsciiParamsTag if present
+            entryCounts[i] = 16 + 1 + 1 + geoTagCount + extraSamplesTag + noDataTag + geoAsciiParamsTag +
                              static_cast<uint16_t>(rc.layers[i].customTags.size());
 
             // Calculate space needed for multi-value custom tag data
@@ -300,8 +314,20 @@ namespace geotiv {
                 p += noDataLengths[i];
             }
 
+            if (layerHasGeoAsciiParams[i]) {
+                geoAsciiParamsOffsets[i] = p;
+                p += geoAsciiParamsLengths[i];
+            }
+
             geoKeyOffsets[i] = p;
-            p += 40; // GeoKeyDirectory = 40 bytes (header:8 + 4 keys×8 = 40)
+            // GeoKeyDirectory size: header (8 bytes) + N keys × 8 bytes
+            // Base keys: 4 (GTModelType, GTRasterType, GeographicType, GeogAngularUnits)
+            // Optional keys: +2 if geoAsciiParams present (GTCitation, GeogCitation)
+            uint16_t numGeoKeys = 4;
+            if (layerHasGeoAsciiParams[i]) {
+                numGeoKeys += 2; // Add GTCitationGeoKey and GeogCitationGeoKey
+            }
+            p += 8 + (numGeoKeys * 8); // header + keys
 
             if (layerHasRotation[i]) {
                 // ModelTransformationTag: 16 doubles = 128 bytes
@@ -416,6 +442,11 @@ namespace geotiv {
             }
             entries.push_back({34735, 3, 20, geoKeyOffsets[i]}); // GeoKeyDirectoryTag
 
+            // GeoAsciiParamsTag (34737) if present
+            if (layerHasGeoAsciiParams[i]) {
+                entries.push_back({34737, 2, geoAsciiParamsLengths[i], geoAsciiParamsOffsets[i]}); // GeoAsciiParamsTag
+            }
+
             // GDAL_NODATA tag (42113) if present
             if (layerHasNoData[i]) {
                 entries.push_back({42113, 2, noDataLengths[i], noDataOffsets[i]}); // GDAL_NODATA
@@ -492,12 +523,25 @@ namespace geotiv {
                 buf[writePos + noDataStrings[i].size()] = '\0';
             }
 
+            // GeoAsciiParams string + NUL (if present)
+            if (layerHasGeoAsciiParams[i]) {
+                writePos = geoAsciiParamsOffsets[i];
+                std::memcpy(&buf[writePos], layer.geoAsciiParams.data(), layer.geoAsciiParams.size());
+                buf[writePos + layer.geoAsciiParams.size()] = '\0';
+            }
+
             // GeoKeyDirectory for this layer (always WGS84)
             writePos = geoKeyOffsets[i];
             writeLE16(1); // KeyDirectoryVersion
             writeLE16(1); // KeyRevision
             writeLE16(0); // MinorRevision
-            writeLE16(4); // NumberOfKeys
+
+            // Calculate number of keys
+            uint16_t numGeoKeys = 4; // Base keys
+            if (layerHasGeoAsciiParams[i]) {
+                numGeoKeys += 2; // Add citation keys
+            }
+            writeLE16(numGeoKeys); // NumberOfKeys
 
             // Key entry 1: GTModelTypeGeoKey
             writeLE16(1024); // GTModelTypeGeoKey
@@ -511,13 +555,29 @@ namespace geotiv {
             writeLE16(1);    // Count
             writeLE16(1);    // RasterPixelIsArea
 
-            // Key entry 3: GeographicTypeGeoKey - EPSG:4326 for WGS84
+            // Key entry 3: GTCitationGeoKey (if geoAsciiParams present)
+            if (layerHasGeoAsciiParams[i]) {
+                writeLE16(1026);  // GTCitationGeoKey
+                writeLE16(34737); // TIFFTagLocation = GeoAsciiParamsTag
+                writeLE16(static_cast<uint16_t>(layer.geoAsciiParams.size() + 1)); // Count (include null terminator)
+                writeLE16(0); // ValueOffset = index 0 in GeoAsciiParams
+            }
+
+            // Key entry 4: GeographicTypeGeoKey - EPSG:4326 for WGS84
             writeLE16(2048); // GeographicTypeGeoKey
             writeLE16(0);    // TIFFTagLocation
             writeLE16(1);    // Count
             writeLE16(4326); // EPSG:4326 (WGS84)
 
-            // Key entry 4: GeogAngularUnitsGeoKey - degrees for WGS84
+            // Key entry 5: GeogCitationGeoKey (if geoAsciiParams present)
+            if (layerHasGeoAsciiParams[i]) {
+                writeLE16(2049);  // GeogCitationGeoKey
+                writeLE16(34737); // TIFFTagLocation = GeoAsciiParamsTag
+                writeLE16(static_cast<uint16_t>(layer.geoAsciiParams.size() + 1)); // Count (include null terminator)
+                writeLE16(0); // ValueOffset = index 0 in GeoAsciiParams
+            }
+
+            // Key entry 6: GeogAngularUnitsGeoKey - degrees for WGS84
             writeLE16(2054); // GeogAngularUnitsGeoKey
             writeLE16(0);    // TIFFTagLocation
             writeLE16(1);    // Count

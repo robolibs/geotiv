@@ -530,6 +530,12 @@ namespace geotiv {
                 }
             }
 
+            // Read GeoAsciiParamsTag (34737) if present
+            auto itGeoAscii = E.find(34737);
+            if (itGeoAscii != E.end() && itGeoAscii->second.type == 2) {
+                L.geoAsciiParams = detail::readString(f, itGeoAscii->second.valueOffset, itGeoAscii->second.count);
+            }
+
             // Read custom tags (tag numbers 50000 and above are typically custom)
             for (const auto &[tag, entry] : E) {
                 if (tag >= 50000) {
