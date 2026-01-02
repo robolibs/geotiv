@@ -99,6 +99,13 @@ namespace geotiv {
 
     namespace fs = std::filesystem;
 
+    /// Read a GeoTIFF file and reconstruct the RasterCollection with full spatial information.
+    ///
+    /// Coordinate Precision:
+    /// - Sub-millimeter precision maintained globally (see PRECISION.md)
+    /// - Round-trip (write → read) preserves coordinates to < 1mm everywhere
+    /// - Resolution preserved to < 0.0001% relative error
+    /// - Uses concord's ECEF-based conversions for maximum accuracy
     inline RasterCollection ReadRasterCollection(const fs::path &file) {
         std::ifstream f(file, std::ios::binary);
         if (!f)
