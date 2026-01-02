@@ -1,8 +1,10 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -60,9 +62,33 @@ namespace geotiv {
         write_le(buf, pos, bits);
     }
 
+    /// Get current date/time in TIFF format: "YYYY:MM:DD HH:MM:SS"
+    inline std::string get_current_datetime() {
+        auto now = std::chrono::system_clock::now();
+        auto time_t_now = std::chrono::system_clock::to_time_t(now);
+        std::tm tm_now;
+
+#ifdef _WIN32
+        localtime_s(&tm_now, &time_t_now);
+#else
+        localtime_r(&time_t_now, &tm_now);
+#endif
+
+        char buffer[20];
+        std::strftime(buffer, sizeof(buffer), "%Y:%m:%d %H:%M:%S", &tm_now);
+        return std::string(buffer);
+    }
+
     /// Write options for GeoTIFF output
     struct WriteOptions {
-        // No compression options - only uncompressed TIFF supported
+        std::string software = "geotiv 0.0.2"; // Software tag (305)
+        std::string datetime = "";             // DateTime tag (306) - empty = current time
+        uint32_t xresolution_num = 72;         // XResolution numerator (default 72 DPI)
+        uint32_t xresolution_den = 1;          // XResolution denominator
+        uint32_t yresolution_num = 72;         // YResolution numerator (default 72 DPI)
+        uint32_t yresolution_den = 1;          // YResolution denominator
+        uint16_t resolution_unit = 2;          // ResolutionUnit: 1=None, 2=Inch (DPI), 3=Centimeter
+        uint32_t rows_per_strip = 0;           // Rows per strip (0 = auto ~8KB, UINT32_MAX = single strip)
     };
 
     /// Write out all layers in rc as a chained-IFD GeoTIFF.
