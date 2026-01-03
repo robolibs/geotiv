@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.0.3] - 2026-01-03
+
+### <!-- 0 -->⛰️  Features
+
+- Add multi-strip organization for memory-efficient large file handling
+- Add BigTIFF support for files >4GB
+- Add custom error types for better error messages
+- Add vertical CRS GeoKeys support
+- Add GeoDoubleParamsTag (34736) support
+- Add GeoAsciiParamsTag (34737) and citation GeoKeys
+- Add NoData value support (GDAL_NODATA tag 42113)
+- Implement TIFF metadata tags (Software, DateTime, Resolution)
+- Add comprehensive coordinate precision validation
+- Support uncompressed TIFF writing
+- Add RGBA color image support with pigment integration
+- Add multi-type grid support with GridVariant
+
+### <!-- 1 -->🐛 Bug Fixes
+
+- Critical TIFF spec compliance and bug fixes
+
+### <!-- 3 -->📚 Documentation
+
+- Update TODO with BigTIFF completion and session summary
+- Add detailed TODO for next session
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Update library dependency versions
+- Remove outdated files and tests
+
+### Wip
+
+- Add metadata tags structure and multi-strip foundation
+
 ## [0.0.2] - 2025-12-31
 
 ### <!-- 0 -->⛰️  Features
