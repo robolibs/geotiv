@@ -25,6 +25,10 @@ namespace geotiv {
         struct TIFFEntry {
             uint16_t tag, type;
             uint32_t count, valueOffset;
+            // Note: For BigTIFF, count and valueOffset are 64-bit in the file format,
+            // but we store them as 32-bit here. This limits support to files where
+            // offsets fit in 32 bits (~4GB). Full BigTIFF support would require
+            // changing these to uint64_t and updating all code that uses TIFFEntry.
         };
 
         inline uint16_t readLE16(std::ifstream &f) {
@@ -147,9 +151,25 @@ namespace geotiv {
         auto read32 = little ? detail::readLE32 : detail::readBE32;
         auto read64 = little ? detail::readLE64 : detail::readBE64;
 
-        if (read16(f) != 42)
-            throw std::runtime_error("Bad TIFF magic");
-        uint32_t nextIFD = read32(f);
+        uint16_t magic = read16(f);
+        bool isBigTIFF = false;
+        uint64_t nextIFD = 0;
+
+        if (magic == 42) {
+            // Classic TIFF
+            nextIFD = read32(f);
+        } else if (magic == 43) {
+            // BigTIFF
+            isBigTIFF = true;
+            uint16_t offsetSize = read16(f); // Should be 8
+            uint16_t zero = read16(f);       // Should be 0
+            if (offsetSize != 8 || zero != 0) {
+                throw std::runtime_error("Invalid BigTIFF header");
+            }
+            nextIFD = read64(f);
+        } else {
+            throw std::runtime_error("Bad TIFF magic (expected 42 for TIFF or 43 for BigTIFF)");
+        }
 
         RasterCollection rc;
 
@@ -157,18 +177,37 @@ namespace geotiv {
         bool firstIFD = true;
         while (nextIFD) {
             f.seekg(nextIFD, std::ios::beg);
-            uint16_t nEnt = read16(f);
+
+            uint64_t nEnt = 0;
+            if (isBigTIFF) {
+                nEnt = read64(f); // BigTIFF uses 64-bit entry count
+            } else {
+                nEnt = read16(f); // Classic TIFF uses 16-bit entry count
+            }
+
             std::map<uint16_t, detail::TIFFEntry> E;
-            for (int i = 0; i < nEnt; ++i) {
+            for (uint64_t i = 0; i < nEnt; ++i) {
                 detail::TIFFEntry e;
                 e.tag = read16(f);
                 e.type = read16(f);
-                e.count = read32(f);
-                e.valueOffset = read32(f);
+
+                if (isBigTIFF) {
+                    e.count = read64(f); // BigTIFF uses 64-bit count
+                    e.valueOffset =
+                        read64(f); // BigTIFF uses 64-bit offset (stored as uint32_t, may truncate for very large files)
+                } else {
+                    e.count = read32(f);
+                    e.valueOffset = read32(f);
+                }
                 E[e.tag] = e;
             }
-            uint32_t currentIFDOffset = nextIFD;
-            nextIFD = read32(f);
+
+            uint64_t currentIFDOffset = nextIFD;
+            if (isBigTIFF) {
+                nextIFD = read64(f);
+            } else {
+                nextIFD = read32(f);
+            }
 
             // TIFF type constants
             constexpr uint16_t TIFF_BYTE = 1;       // 8-bit unsigned

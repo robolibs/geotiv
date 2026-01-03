@@ -89,6 +89,7 @@ namespace geotiv {
         uint32_t yresolution_den = 1;          // YResolution denominator
         uint16_t resolution_unit = 2;          // ResolutionUnit: 1=None, 2=Inch (DPI), 3=Centimeter
         uint32_t rows_per_strip = 0;           // Rows per strip (0 = auto ~8KB, UINT32_MAX = single strip)
+        bool force_bigtiff = false;            // Force BigTIFF format (auto-detected if file > 4GB)
     };
 
     /// Write out all layers in rc as a chained-IFD GeoTIFF.
@@ -180,15 +181,28 @@ namespace geotiv {
                 layer.grid);
         }
 
-        // --- 2) Compute strip offsets (right after the 8-byte TIFF header) ---
-        uint32_t p = 8;
+        // --- 2) Determine if BigTIFF is needed ---
+        // Calculate estimated file size to determine if BigTIFF is required
+        uint64_t estimated_size = 0;
         for (size_t i = 0; i < N; ++i) {
-            stripOffsets[i] = p;
+            estimated_size += stripCounts[i];
+        }
+        // Add overhead for IFDs and metadata (conservative estimate)
+        estimated_size += N * 10000; // ~10KB per IFD for metadata
+
+        // Use BigTIFF if forced or if file will exceed 4GB
+        bool use_bigtiff = options.force_bigtiff || (estimated_size > 0xFFFFFFFFULL);
+
+        // --- 3) Compute strip offsets (right after TIFF header) ---
+        // Classic TIFF: 8-byte header, BigTIFF: 16-byte header
+        uint64_t p = use_bigtiff ? 16 : 8;
+        for (size_t i = 0; i < N; ++i) {
+            stripOffsets[i] = static_cast<uint32_t>(p);
             p += stripCounts[i];
         }
-        uint32_t firstIFD = p;
+        uint64_t firstIFD = p;
 
-        // --- 3) Prepare per-layer metadata ---
+        // --- 4) Prepare per-layer metadata ---
         std::vector<std::string> descriptions(N);
         std::vector<uint32_t> descLengths(N);
         std::vector<uint32_t> descOffsets(N);
@@ -270,7 +284,7 @@ namespace geotiv {
             }
         }
 
-        // --- 4) Compute IFD offsets and sizes ---
+        // --- 5) Compute IFD offsets and sizes ---
         std::vector<uint16_t> entryCounts(N);
         std::vector<uint32_t> customDataOffsets(N);
         std::vector<uint32_t> customDataSizes(N);
@@ -300,19 +314,25 @@ namespace geotiv {
             }
         }
 
-        std::vector<uint32_t> ifdSizes(N);
+        std::vector<uint64_t> ifdSizes(N);
         for (size_t i = 0; i < N; ++i) {
-            ifdSizes[i] = 2 + entryCounts[i] * 12 + 4; // entry count + entries + next IFD pointer
+            if (use_bigtiff) {
+                // BigTIFF: 8-byte entry count + 20-byte entries + 8-byte next IFD pointer
+                ifdSizes[i] = 8 + entryCounts[i] * 20 + 8;
+            } else {
+                // Classic TIFF: 2-byte entry count + 12-byte entries + 4-byte next IFD pointer
+                ifdSizes[i] = 2 + entryCounts[i] * 12 + 4;
+            }
         }
 
-        std::vector<uint32_t> ifdOffsets(N);
+        std::vector<uint64_t> ifdOffsets(N);
         p = firstIFD;
         for (size_t i = 0; i < N; ++i) {
             ifdOffsets[i] = p;
             p += ifdSizes[i];
         }
 
-        // --- 5) Compute offsets for variable-length data ---
+        // --- 6) Compute offsets for variable-length data ---
         for (size_t i = 0; i < N; ++i) {
             descOffsets[i] = p;
             p += descLengths[i];
@@ -384,9 +404,9 @@ namespace geotiv {
             p += customDataSizes[i];
         }
 
-        uint32_t totalSize = p;
+        uint64_t totalSize = p;
 
-        // --- 5) Allocate final buffer ---
+        // --- 7) Allocate final buffer ---
         std::vector<uint8_t> buf(totalSize);
         size_t writePos = 0;
 
@@ -409,22 +429,35 @@ namespace geotiv {
             }
         };
 
-        // --- 6) TIFF header ---
+        // --- 8) TIFF/BigTIFF header ---
         buf[writePos++] = 'I';
         buf[writePos++] = 'I'; // little-endian
-        writeLE16(42);         // magic
-        writeLE32(firstIFD);   // offset to first IFD
 
-        // --- 7) Pixel data strips ---
+        if (use_bigtiff) {
+            // BigTIFF header
+            writeLE16(43); // magic number for BigTIFF
+            writeLE16(8);  // offset size (always 8 for BigTIFF)
+            writeLE16(0);  // always 0
+            // Write 64-bit offset to first IFD
+            for (int i = 0; i < 8; ++i) {
+                buf[writePos++] = static_cast<uint8_t>((firstIFD >> (8 * i)) & 0xFF);
+            }
+        } else {
+            // Classic TIFF header
+            writeLE16(42);                              // magic number
+            writeLE32(static_cast<uint32_t>(firstIFD)); // offset to first IFD
+        }
+
+        // --- 9) Pixel data strips ---
         for (size_t i = 0; i < N; ++i) {
             std::memcpy(&buf[writePos], strips[i].data(), strips[i].size());
             writePos += strips[i].size();
         }
 
-        // --- 8) IFDs (with proper tag ordering per TIFF 6.0 spec) ---
+        // --- 10) IFDs (with proper tag ordering per TIFF 6.0 spec) ---
         for (size_t i = 0; i < N; ++i) {
             // Seek to the correct IFD position
-            writePos = ifdOffsets[i];
+            writePos = static_cast<size_t>(ifdOffsets[i]);
 
             auto const &layer = rc.layers[i];
             auto [rows, cols] = get_grid_dimensions(layer.grid);
@@ -507,23 +540,53 @@ namespace geotiv {
             // Sort entries by tag number (TIFF 6.0 requirement)
             std::sort(entries.begin(), entries.end());
 
-            // Write entry count
-            writeLE16(static_cast<uint16_t>(entries.size()));
+            if (use_bigtiff) {
+                // BigTIFF: 64-bit entry count
+                uint64_t entryCount = entries.size();
+                for (int j = 0; j < 8; ++j) {
+                    buf[writePos++] = static_cast<uint8_t>((entryCount >> (8 * j)) & 0xFF);
+                }
 
-            // Write sorted entries
-            for (const auto &entry : entries) {
-                writeLE16(entry.tag);
-                writeLE16(entry.type);
-                writeLE32(entry.count);
-                writeLE32(entry.value_or_offset);
+                // Write sorted entries (BigTIFF format: 20 bytes per entry)
+                for (const auto &entry : entries) {
+                    writeLE16(entry.tag);
+                    writeLE16(entry.type);
+                    // 64-bit count
+                    uint64_t count64 = entry.count;
+                    for (int j = 0; j < 8; ++j) {
+                        buf[writePos++] = static_cast<uint8_t>((count64 >> (8 * j)) & 0xFF);
+                    }
+                    // 64-bit value/offset (extend 32-bit value to 64-bit)
+                    uint64_t value64 = entry.value_or_offset;
+                    for (int j = 0; j < 8; ++j) {
+                        buf[writePos++] = static_cast<uint8_t>((value64 >> (8 * j)) & 0xFF);
+                    }
+                }
+
+                // Next IFD pointer (64-bit)
+                uint64_t next = (i + 1 < N ? ifdOffsets[i + 1] : 0);
+                for (int j = 0; j < 8; ++j) {
+                    buf[writePos++] = static_cast<uint8_t>((next >> (8 * j)) & 0xFF);
+                }
+            } else {
+                // Classic TIFF: 16-bit entry count
+                writeLE16(static_cast<uint16_t>(entries.size()));
+
+                // Write sorted entries (Classic TIFF format: 12 bytes per entry)
+                for (const auto &entry : entries) {
+                    writeLE16(entry.tag);
+                    writeLE16(entry.type);
+                    writeLE32(entry.count);
+                    writeLE32(entry.value_or_offset);
+                }
+
+                // Next IFD pointer (32-bit)
+                uint32_t next = (i + 1 < N ? static_cast<uint32_t>(ifdOffsets[i + 1]) : 0);
+                writeLE32(next);
             }
-
-            // next IFD pointer
-            uint32_t next = (i + 1 < N ? ifdOffsets[i + 1] : 0);
-            writeLE32(next);
         }
 
-        // --- 9) Write variable-length data for each layer ---
+        // --- 11) Write variable-length data for each layer ---
         for (size_t i = 0; i < N; ++i) {
             auto const &layer = rc.layers[i];
             auto [gridRows, gridCols] = get_grid_dimensions(layer.grid);
