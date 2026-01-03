@@ -106,10 +106,12 @@ namespace geotiv {
         if (N == 0)
             throw std::runtime_error("toTiffBytes(): no layers");
 
-        // --- 1) Flatten each layer's grid into its own chunky strip ---
+        // --- 1) Flatten each layer's grid into strips (single or multiple) ---
         // Now handles multiple data types via std::visit
-        std::vector<std::vector<uint8_t>> strips(N);
-        std::vector<uint32_t> stripCounts(N), stripOffsets(N);
+        std::vector<std::vector<std::vector<uint8_t>>> layerStrips(N); // [layer][strip][bytes]
+        std::vector<std::vector<uint32_t>> stripCounts(N);             // [layer][strip]
+        std::vector<std::vector<uint32_t>> stripOffsets(N);            // [layer][strip]
+        std::vector<uint32_t> rowsPerStrip(N);                         // [layer]
         std::vector<uint16_t> bitsPerSample(N);
         std::vector<SampleFormat> sampleFormats(N);
         std::vector<uint16_t> samplesPerPixel(N);
@@ -134,49 +136,85 @@ namespace geotiv {
 
                     uint32_t W = static_cast<uint32_t>(g.cols);
                     uint32_t H = static_cast<uint32_t>(g.rows);
+                    uint32_t S = layer.samplesPerPixel > 0 ? layer.samplesPerPixel : 1;
 
-                    std::vector<uint8_t> rawData;
-
+                    // Calculate bytes per pixel
+                    size_t bytesPerPixel;
                     if constexpr (std::is_same_v<T, RGBA>) {
-                        // RGBA grid: write 4 bytes per pixel (R, G, B, A)
-                        size_t sz = size_t(W) * H * 4;
-                        rawData.resize(sz);
-
-                        size_t idx = 0;
-                        for (int32_t r = H - 1; r >= 0; --r) {
-                            for (uint32_t c = 0; c < W; ++c) {
-                                const RGBA &v = g(r, c);
-                                rawData[idx++] = v.r;
-                                rawData[idx++] = v.g;
-                                rawData[idx++] = v.b;
-                                rawData[idx++] = v.a;
-                            }
-                        }
+                        bytesPerPixel = 4; // RGBA: 4 bytes per pixel
                     } else {
-                        // Scalar grid: write single value per pixel
-                        uint32_t S = layer.samplesPerPixel > 0 ? layer.samplesPerPixel : 1;
-                        size_t bytesPerSample = sizeof(T);
-                        size_t sz = size_t(W) * H * S * bytesPerSample;
+                        bytesPerPixel = sizeof(T) * S; // Scalar: element size * samples
+                    }
 
-                        rawData.resize(sz);
+                    // Calculate optimal rows per strip
+                    uint32_t rows_per_strip_calc;
+                    if (options.rows_per_strip == UINT32_MAX) {
+                        // Single strip mode
+                        rows_per_strip_calc = H;
+                    } else if (options.rows_per_strip > 0) {
+                        // User-specified
+                        rows_per_strip_calc = std::min(options.rows_per_strip, H);
+                    } else {
+                        // Auto: target ~8KB strips (TIFF recommendation)
+                        const uint32_t target_strip_bytes = 8192;
+                        uint32_t bytes_per_row = W * static_cast<uint32_t>(bytesPerPixel);
+                        rows_per_strip_calc = std::max(1u, target_strip_bytes / bytes_per_row);
+                        rows_per_strip_calc = std::min(rows_per_strip_calc, H);
+                    }
+                    rowsPerStrip[i] = rows_per_strip_calc;
 
-                        // Fill chunky: band0,band1,... per pixel
-                        // Flip vertically: write bottom row first to match GeoTIFF coordinate system
-                        size_t idx = 0;
-                        for (int32_t r = H - 1; r >= 0; --r) {
-                            for (uint32_t c = 0; c < W; ++c) {
-                                T v = g(r, c);
-                                for (uint32_t s = 0; s < S; ++s) {
-                                    write_le<T>(rawData, idx, v);
+                    // Calculate number of strips
+                    uint32_t num_strips = (H + rows_per_strip_calc - 1) / rows_per_strip_calc;
+                    layerStrips[i].resize(num_strips);
+                    stripCounts[i].resize(num_strips);
+
+                    // Split grid data into strips
+                    for (uint32_t strip_idx = 0; strip_idx < num_strips; ++strip_idx) {
+                        uint32_t start_row = strip_idx * rows_per_strip_calc;
+                        uint32_t end_row = std::min(start_row + rows_per_strip_calc, H);
+                        uint32_t strip_rows = end_row - start_row;
+
+                        std::vector<uint8_t> stripData;
+
+                        if constexpr (std::is_same_v<T, RGBA>) {
+                            // RGBA grid: write 4 bytes per pixel (R, G, B, A)
+                            size_t sz = size_t(W) * strip_rows * 4;
+                            stripData.resize(sz);
+
+                            size_t idx = 0;
+                            // Flip vertically: write bottom row first
+                            for (int32_t r = static_cast<int32_t>(H - 1 - start_row);
+                                 r >= static_cast<int32_t>(H - end_row); --r) {
+                                for (uint32_t c = 0; c < W; ++c) {
+                                    const RGBA &v = g(r, c);
+                                    stripData[idx++] = v.r;
+                                    stripData[idx++] = v.g;
+                                    stripData[idx++] = v.b;
+                                    stripData[idx++] = v.a;
+                                }
+                            }
+                        } else {
+                            // Scalar grid: write single value per pixel
+                            size_t sz = size_t(W) * strip_rows * S * sizeof(T);
+                            stripData.resize(sz);
+
+                            // Fill chunky: band0,band1,... per pixel
+                            // Flip vertically: write bottom row first
+                            size_t idx = 0;
+                            for (int32_t r = static_cast<int32_t>(H - 1 - start_row);
+                                 r >= static_cast<int32_t>(H - end_row); --r) {
+                                for (uint32_t c = 0; c < W; ++c) {
+                                    T v = g(r, c);
+                                    for (uint32_t s = 0; s < S; ++s) {
+                                        write_le<T>(stripData, idx, v);
+                                    }
                                 }
                             }
                         }
+
+                        layerStrips[i][strip_idx] = std::move(stripData);
+                        stripCounts[i][strip_idx] = static_cast<uint32_t>(layerStrips[i][strip_idx].size());
                     }
-
-                    // Store uncompressed data directly
-                    strips[i] = std::move(rawData);
-
-                    stripCounts[i] = static_cast<uint32_t>(strips[i].size());
                 },
                 layer.grid);
         }
@@ -185,7 +223,9 @@ namespace geotiv {
         // Calculate estimated file size to determine if BigTIFF is required
         uint64_t estimated_size = 0;
         for (size_t i = 0; i < N; ++i) {
-            estimated_size += stripCounts[i];
+            for (size_t j = 0; j < stripCounts[i].size(); ++j) {
+                estimated_size += stripCounts[i][j];
+            }
         }
         // Add overhead for IFDs and metadata (conservative estimate)
         estimated_size += N * 10000; // ~10KB per IFD for metadata
@@ -197,8 +237,11 @@ namespace geotiv {
         // Classic TIFF: 8-byte header, BigTIFF: 16-byte header
         uint64_t p = use_bigtiff ? 16 : 8;
         for (size_t i = 0; i < N; ++i) {
-            stripOffsets[i] = static_cast<uint32_t>(p);
-            p += stripCounts[i];
+            stripOffsets[i].resize(stripCounts[i].size());
+            for (size_t j = 0; j < stripCounts[i].size(); ++j) {
+                stripOffsets[i][j] = static_cast<uint32_t>(p);
+                p += stripCounts[i][j];
+            }
         }
         uint64_t firstIFD = p;
 
@@ -333,6 +376,9 @@ namespace geotiv {
         }
 
         // --- 6) Compute offsets for variable-length data ---
+        std::vector<uint32_t> stripOffsetsArrayOffsets(N);
+        std::vector<uint32_t> stripCountsArrayOffsets(N);
+
         for (size_t i = 0; i < N; ++i) {
             descOffsets[i] = p;
             p += descLengths[i];
@@ -362,6 +408,18 @@ namespace geotiv {
             if (layerHasGeoDoubleParams[i]) {
                 geoDoubleParamsOffsets[i] = p;
                 p += geoDoubleParamsCounts[i] * 8; // Each double is 8 bytes
+            }
+
+            // Strip offset/count arrays (only if multiple strips)
+            if (stripOffsets[i].size() > 1) {
+                stripOffsetsArrayOffsets[i] = static_cast<uint32_t>(p);
+                p += stripOffsets[i].size() * 4; // 4 bytes per LONG
+
+                stripCountsArrayOffsets[i] = static_cast<uint32_t>(p);
+                p += stripCounts[i].size() * 4; // 4 bytes per LONG
+            } else {
+                stripOffsetsArrayOffsets[i] = 0; // Not used for single strip
+                stripCountsArrayOffsets[i] = 0;
             }
 
             geoKeyOffsets[i] = p;
@@ -450,8 +508,10 @@ namespace geotiv {
 
         // --- 9) Pixel data strips ---
         for (size_t i = 0; i < N; ++i) {
-            std::memcpy(&buf[writePos], strips[i].data(), strips[i].size());
-            writePos += strips[i].size();
+            for (size_t j = 0; j < layerStrips[i].size(); ++j) {
+                std::memcpy(&buf[writePos], layerStrips[i][j].data(), layerStrips[i][j].size());
+                writePos += layerStrips[i][j].size();
+            }
         }
 
         // --- 10) IFDs (with proper tag ordering per TIFF 6.0 spec) ---
@@ -472,16 +532,31 @@ namespace geotiv {
             entries.reserve(entryCounts[i]);
 
             // Standard TIFF tags
-            entries.push_back({256, 4, 1, W});                               // ImageWidth
-            entries.push_back({257, 4, 1, H});                               // ImageLength
-            entries.push_back({258, 3, 1, bitsPerSample[i]});                // BitsPerSample
-            entries.push_back({259, 3, 1, 1});                               // Compression (1 = None)
-            entries.push_back({262, 3, 1, PI});                              // PhotometricInterpretation
-            entries.push_back({270, 2, descLengths[i], descOffsets[i]});     // ImageDescription
-            entries.push_back({273, 4, 1, stripOffsets[i]});                 // StripOffsets
-            entries.push_back({277, 3, 1, S});                               // SamplesPerPixel
-            entries.push_back({278, 4, 1, H});                               // RowsPerStrip
-            entries.push_back({279, 4, 1, stripCounts[i]});                  // StripByteCounts
+            entries.push_back({256, 4, 1, W});                           // ImageWidth
+            entries.push_back({257, 4, 1, H});                           // ImageLength
+            entries.push_back({258, 3, 1, bitsPerSample[i]});            // BitsPerSample
+            entries.push_back({259, 3, 1, 1});                           // Compression (1 = None)
+            entries.push_back({262, 3, 1, PI});                          // PhotometricInterpretation
+            entries.push_back({270, 2, descLengths[i], descOffsets[i]}); // ImageDescription
+
+            // StripOffsets: single value or array
+            if (stripOffsets[i].size() == 1) {
+                entries.push_back({273, 4, 1, stripOffsets[i][0]}); // StripOffsets (single)
+            } else {
+                entries.push_back({273, 4, static_cast<uint32_t>(stripOffsets[i].size()),
+                                   stripOffsetsArrayOffsets[i]}); // StripOffsets (array)
+            }
+
+            entries.push_back({277, 3, 1, S});               // SamplesPerPixel
+            entries.push_back({278, 4, 1, rowsPerStrip[i]}); // RowsPerStrip
+
+            // StripByteCounts: single value or array
+            if (stripCounts[i].size() == 1) {
+                entries.push_back({279, 4, 1, stripCounts[i][0]}); // StripByteCounts (single)
+            } else {
+                entries.push_back({279, 4, static_cast<uint32_t>(stripCounts[i].size()),
+                                   stripCountsArrayOffsets[i]}); // StripByteCounts (array)
+            }
             entries.push_back({282, 5, 1, xresolutionOffsets[i]});           // XResolution (RATIONAL)
             entries.push_back({283, 5, 1, yresolutionOffsets[i]});           // YResolution (RATIONAL)
             entries.push_back({284, 3, 1, PC});                              // PlanarConfiguration
@@ -646,6 +721,21 @@ namespace geotiv {
                 for (const auto &val : layer.geoDoubleParams) {
                     std::memcpy(&buf[writePos], &val, 8);
                     writePos += 8;
+                }
+            }
+
+            // Strip offset/count arrays (if multiple strips)
+            if (stripOffsets[i].size() > 1) {
+                // Write StripOffsets array
+                writePos = stripOffsetsArrayOffsets[i];
+                for (uint32_t offset : stripOffsets[i]) {
+                    writeLE32(offset);
+                }
+
+                // Write StripByteCounts array
+                writePos = stripCountsArrayOffsets[i];
+                for (uint32_t count : stripCounts[i]) {
+                    writeLE32(count);
                 }
             }
 
