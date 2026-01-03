@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "geotiv/errors.hpp"
 #include "geotiv/types.hpp"
 #include <concord/concord.hpp>
 #include <datapod/datapod.hpp>
