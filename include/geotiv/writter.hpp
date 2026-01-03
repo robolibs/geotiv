@@ -206,6 +206,9 @@ namespace geotiv {
         std::vector<uint32_t> geoAsciiParamsOffsets(N);
         std::vector<uint32_t> geoAsciiParamsLengths(N);
         std::vector<bool> layerHasGeoAsciiParams(N);
+        std::vector<uint32_t> geoDoubleParamsOffsets(N);
+        std::vector<uint32_t> geoDoubleParamsCounts(N);
+        std::vector<bool> layerHasGeoDoubleParams(N);
         std::vector<uint32_t> scaleOffsets(N);
         std::vector<uint32_t> geoKeyOffsets(N);
         std::vector<uint32_t> tiepointOffsets(N);
@@ -249,6 +252,15 @@ namespace geotiv {
                 layerHasGeoAsciiParams[i] = false;
                 geoAsciiParamsLengths[i] = 0;
             }
+
+            // Prepare GeoDoubleParams if present (tag 34736)
+            if (!layer.geoDoubleParams.empty()) {
+                geoDoubleParamsCounts[i] = static_cast<uint32_t>(layer.geoDoubleParams.size());
+                layerHasGeoDoubleParams[i] = true;
+            } else {
+                layerHasGeoDoubleParams[i] = false;
+                geoDoubleParamsCounts[i] = 0;
+            }
         }
 
         // --- 4) Compute IFD offsets and sizes ---
@@ -262,14 +274,15 @@ namespace geotiv {
             //                         XResolution, YResolution, PlanarConfig, ResolutionUnit, Software, DateTime)
             // Plus: SampleFormat (1) + GeoKeyDirectory (1)
             // Plus either: ModelTransformation (1) OR ModelPixelScale+ModelTiepoint (2)
-            // Plus optional: ExtraSamples (1 if RGBA), NoData (1 if present), GeoAsciiParams (1 if present)
-            // Plus: custom tags
-            uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2;             // 1 for transform, 2 for scale+tiepoint
-            uint16_t extraSamplesTag = (samplesPerPixel[i] > 3) ? 1 : 0;    // ExtraSamples for alpha channel
-            uint16_t noDataTag = layerHasNoData[i] ? 1 : 0;                 // GDAL_NODATA tag if present
-            uint16_t geoAsciiParamsTag = layerHasGeoAsciiParams[i] ? 1 : 0; // GeoAsciiParamsTag if present
+            // Plus optional: ExtraSamples (1 if RGBA), NoData (1 if present), GeoAsciiParams (1 if present),
+            // GeoDoubleParams (1 if present) Plus: custom tags
+            uint16_t geoTagCount = layerHasRotation[i] ? 1 : 2;               // 1 for transform, 2 for scale+tiepoint
+            uint16_t extraSamplesTag = (samplesPerPixel[i] > 3) ? 1 : 0;      // ExtraSamples for alpha channel
+            uint16_t noDataTag = layerHasNoData[i] ? 1 : 0;                   // GDAL_NODATA tag if present
+            uint16_t geoAsciiParamsTag = layerHasGeoAsciiParams[i] ? 1 : 0;   // GeoAsciiParamsTag if present
+            uint16_t geoDoubleParamsTag = layerHasGeoDoubleParams[i] ? 1 : 0; // GeoDoubleParamsTag if present
             entryCounts[i] = 16 + 1 + 1 + geoTagCount + extraSamplesTag + noDataTag + geoAsciiParamsTag +
-                             static_cast<uint16_t>(rc.layers[i].customTags.size());
+                             geoDoubleParamsTag + static_cast<uint16_t>(rc.layers[i].customTags.size());
 
             // Calculate space needed for multi-value custom tag data
             customDataSizes[i] = 0;
@@ -317,6 +330,11 @@ namespace geotiv {
             if (layerHasGeoAsciiParams[i]) {
                 geoAsciiParamsOffsets[i] = p;
                 p += geoAsciiParamsLengths[i];
+            }
+
+            if (layerHasGeoDoubleParams[i]) {
+                geoDoubleParamsOffsets[i] = p;
+                p += geoDoubleParamsCounts[i] * 8; // Each double is 8 bytes
             }
 
             geoKeyOffsets[i] = p;
@@ -442,6 +460,12 @@ namespace geotiv {
             }
             entries.push_back({34735, 3, 20, geoKeyOffsets[i]}); // GeoKeyDirectoryTag
 
+            // GeoDoubleParamsTag (34736) if present
+            if (layerHasGeoDoubleParams[i]) {
+                entries.push_back({34736, 12, geoDoubleParamsCounts[i],
+                                   geoDoubleParamsOffsets[i]}); // GeoDoubleParamsTag (type 12 = DOUBLE)
+            }
+
             // GeoAsciiParamsTag (34737) if present
             if (layerHasGeoAsciiParams[i]) {
                 entries.push_back({34737, 2, geoAsciiParamsLengths[i], geoAsciiParamsOffsets[i]}); // GeoAsciiParamsTag
@@ -528,6 +552,15 @@ namespace geotiv {
                 writePos = geoAsciiParamsOffsets[i];
                 std::memcpy(&buf[writePos], layer.geoAsciiParams.data(), layer.geoAsciiParams.size());
                 buf[writePos + layer.geoAsciiParams.size()] = '\0';
+            }
+
+            // GeoDoubleParams array (if present)
+            if (layerHasGeoDoubleParams[i]) {
+                writePos = geoDoubleParamsOffsets[i];
+                for (const auto &val : layer.geoDoubleParams) {
+                    std::memcpy(&buf[writePos], &val, 8);
+                    writePos += 8;
+                }
             }
 
             // GeoKeyDirectory for this layer (always WGS84)

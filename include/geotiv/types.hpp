@@ -283,6 +283,11 @@ namespace geotiv {
         /// Used for citation strings like GTCitationGeoKey, GeogCitationGeoKey
         std::string geoAsciiParams;
 
+        /// GeoTIFF double parameters (optional) - stores floating-point GeoKey values
+        /// Used for precise angular values, custom datum parameters, ellipsoid axes
+        /// GeoKeys reference this array by index
+        std::vector<double> geoDoubleParams;
+
         /// Grid data - supports multiple numeric types via variant
         GridVariant grid;
 

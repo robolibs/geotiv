@@ -536,6 +536,15 @@ namespace geotiv {
                 L.geoAsciiParams = detail::readString(f, itGeoAscii->second.valueOffset, itGeoAscii->second.count);
             }
 
+            // Read GeoDoubleParamsTag (34736) if present
+            auto itGeoDouble = E.find(34736);
+            if (itGeoDouble != E.end() && itGeoDouble->second.type == 12) { // Type 12 = DOUBLE
+                uint32_t count = itGeoDouble->second.count;
+                L.geoDoubleParams.resize(count);
+                f.seekg(itGeoDouble->second.valueOffset);
+                f.read(reinterpret_cast<char *>(L.geoDoubleParams.data()), count * 8);
+            }
+
             // Read custom tags (tag numbers 50000 and above are typically custom)
             for (const auto &[tag, entry] : E) {
                 if (tag >= 50000) {
