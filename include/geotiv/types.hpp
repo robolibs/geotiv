@@ -288,6 +288,20 @@ namespace geotiv {
         /// GeoKeys reference this array by index
         std::vector<double> geoDoubleParams;
 
+        /// Vertical CRS (optional) - elevation/altitude datum
+        /// Common values: 5030 (WGS84 ellipsoid), 5103 (EGM96 geoid), 5773 (EGM2008 geoid)
+        /// If not set, defaults to WGS84 ellipsoid height (current behavior)
+        std::optional<uint16_t> verticalDatum;
+
+        /// Vertical units (optional) - units for vertical measurements
+        /// Common values: 9001 (meters), 9002 (feet), 9003 (US survey feet)
+        /// If not set, defaults to meters
+        std::optional<uint16_t> verticalUnits;
+
+        /// Vertical citation (optional) - human-readable vertical CRS description
+        /// Stored in geoAsciiParams if set
+        std::string verticalCitation;
+
         /// Grid data - supports multiple numeric types via variant
         GridVariant grid;
 

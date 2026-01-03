@@ -244,9 +244,16 @@ namespace geotiv {
             }
 
             // Prepare GeoAsciiParams if present (tag 34737)
-            if (!layer.geoAsciiParams.empty()) {
-                geoAsciiParamsLengths[i] =
-                    static_cast<uint32_t>(layer.geoAsciiParams.size() + 1); // +1 for null terminator
+            // Includes both geoAsciiParams and verticalCitation (if present)
+            if (!layer.geoAsciiParams.empty() || !layer.verticalCitation.empty()) {
+                uint32_t totalLength = 0;
+                if (!layer.geoAsciiParams.empty()) {
+                    totalLength += static_cast<uint32_t>(layer.geoAsciiParams.size() + 1); // +1 for null terminator
+                }
+                if (!layer.verticalCitation.empty()) {
+                    totalLength += static_cast<uint32_t>(layer.verticalCitation.size() + 1); // +1 for null terminator
+                }
+                geoAsciiParamsLengths[i] = totalLength;
                 layerHasGeoAsciiParams[i] = true;
             } else {
                 layerHasGeoAsciiParams[i] = false;
@@ -341,10 +348,18 @@ namespace geotiv {
             // GeoKeyDirectory size: header (8 bytes) + N keys × 8 bytes
             // Base keys: 4 (GTModelType, GTRasterType, GeographicType, GeogAngularUnits)
             // Optional keys: +2 if geoAsciiParams present (GTCitation, GeogCitation)
+            // Optional keys: +1 to +3 for vertical CRS (VerticalDatum, VerticalUnits, VerticalCitation)
             uint16_t numGeoKeys = 4;
             if (layerHasGeoAsciiParams[i]) {
                 numGeoKeys += 2; // Add GTCitationGeoKey and GeogCitationGeoKey
             }
+            // Count vertical CRS keys
+            if (rc.layers[i].verticalDatum.has_value())
+                numGeoKeys++;
+            if (rc.layers[i].verticalUnits.has_value())
+                numGeoKeys++;
+            if (!rc.layers[i].verticalCitation.empty())
+                numGeoKeys++;
             p += 8 + (numGeoKeys * 8); // header + keys
 
             if (layerHasRotation[i]) {
@@ -548,10 +563,18 @@ namespace geotiv {
             }
 
             // GeoAsciiParams string + NUL (if present)
+            // Includes both geoAsciiParams and verticalCitation
             if (layerHasGeoAsciiParams[i]) {
                 writePos = geoAsciiParamsOffsets[i];
-                std::memcpy(&buf[writePos], layer.geoAsciiParams.data(), layer.geoAsciiParams.size());
-                buf[writePos + layer.geoAsciiParams.size()] = '\0';
+                if (!layer.geoAsciiParams.empty()) {
+                    std::memcpy(&buf[writePos], layer.geoAsciiParams.data(), layer.geoAsciiParams.size());
+                    buf[writePos + layer.geoAsciiParams.size()] = '\0';
+                    writePos += layer.geoAsciiParams.size() + 1;
+                }
+                if (!layer.verticalCitation.empty()) {
+                    std::memcpy(&buf[writePos], layer.verticalCitation.data(), layer.verticalCitation.size());
+                    buf[writePos + layer.verticalCitation.size()] = '\0';
+                }
             }
 
             // GeoDoubleParams array (if present)
@@ -574,6 +597,13 @@ namespace geotiv {
             if (layerHasGeoAsciiParams[i]) {
                 numGeoKeys += 2; // Add citation keys
             }
+            // Count vertical CRS keys
+            if (layer.verticalDatum.has_value())
+                numGeoKeys++;
+            if (layer.verticalUnits.has_value())
+                numGeoKeys++;
+            if (!layer.verticalCitation.empty())
+                numGeoKeys++;
             writeLE16(numGeoKeys); // NumberOfKeys
 
             // Key entry 1: GTModelTypeGeoKey
@@ -615,6 +645,34 @@ namespace geotiv {
             writeLE16(0);    // TIFFTagLocation
             writeLE16(1);    // Count
             writeLE16(9102); // 9102=degree
+
+            // Vertical CRS GeoKeys (if present)
+            // Key entry 7: VerticalCitationGeoKey (4097) - if present
+            if (!layer.verticalCitation.empty()) {
+                writeLE16(4097);  // VerticalCitationGeoKey
+                writeLE16(34737); // TIFFTagLocation = GeoAsciiParamsTag
+                writeLE16(static_cast<uint16_t>(layer.verticalCitation.size() + 1)); // Count (include null terminator)
+                // ValueOffset = offset in GeoAsciiParams (after main citation if present)
+                uint16_t offset =
+                    !layer.geoAsciiParams.empty() ? static_cast<uint16_t>(layer.geoAsciiParams.size() + 1) : 0;
+                writeLE16(offset);
+            }
+
+            // Key entry 8: VerticalDatumGeoKey (4098) - if present
+            if (layer.verticalDatum.has_value()) {
+                writeLE16(4098); // VerticalDatumGeoKey
+                writeLE16(0);    // TIFFTagLocation (inline value)
+                writeLE16(1);    // Count
+                writeLE16(layer.verticalDatum.value());
+            }
+
+            // Key entry 9: VerticalUnitsGeoKey (4099) - if present
+            if (layer.verticalUnits.has_value()) {
+                writeLE16(4099); // VerticalUnitsGeoKey
+                writeLE16(0);    // TIFFTagLocation (inline value)
+                writeLE16(1);    // Count
+                writeLE16(layer.verticalUnits.value());
+            }
 
             // Calculate common values needed for georeferencing
             cc::frame::ENU center_enu{layer.shift.point.x, layer.shift.point.y, layer.shift.point.z, layer.datum};

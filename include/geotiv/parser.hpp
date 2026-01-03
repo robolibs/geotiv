@@ -81,19 +81,43 @@ namespace geotiv {
         }
 
         inline std::string readString(std::ifstream &f, uint32_t offset, uint32_t count) {
-            if (count == 0)
-                return "";
-            std::vector<char> buf(count);
-            f.seekg(offset, std::ios::beg);
-            f.read(buf.data(), count);
-            if (f.gcount() != static_cast<std::streamsize>(count))
-                throw std::runtime_error("Failed to read string data");
-
-            // Ensure null termination
-            if (buf.back() != '\0') {
-                buf.push_back('\0');
+            f.seekg(offset);
+            std::string s(count, '\0');
+            f.read(&s[0], count);
+            // Remove trailing nulls
+            size_t len = s.find('\0');
+            if (len != std::string::npos) {
+                s.resize(len);
             }
-            return std::string(buf.data());
+            return s;
+        }
+
+        struct GeoKey {
+            uint16_t keyID;
+            uint16_t tiffTagLocation;
+            uint16_t count;
+            uint16_t valueOffset;
+        };
+
+        inline std::map<uint16_t, GeoKey> parseGeoKeyDirectory(std::ifstream &f, uint32_t offset) {
+            std::map<uint16_t, GeoKey> geoKeys;
+            f.seekg(offset);
+
+            uint16_t keyDirectoryVersion = readLE16(f);
+            uint16_t keyRevision = readLE16(f);
+            uint16_t minorRevision = readLE16(f);
+            uint16_t numberOfKeys = readLE16(f);
+
+            for (uint16_t i = 0; i < numberOfKeys; ++i) {
+                GeoKey key;
+                key.keyID = readLE16(f);
+                key.tiffTagLocation = readLE16(f);
+                key.count = readLE16(f);
+                key.valueOffset = readLE16(f);
+                geoKeys[key.keyID] = key;
+            }
+
+            return geoKeys;
         }
     } // namespace detail
 
@@ -531,9 +555,60 @@ namespace geotiv {
             }
 
             // Read GeoAsciiParamsTag (34737) if present
+            // Read the full buffer including null terminators for proper substring extraction
             auto itGeoAscii = E.find(34737);
+            std::string fullGeoAsciiParams;
             if (itGeoAscii != E.end() && itGeoAscii->second.type == 2) {
-                L.geoAsciiParams = detail::readString(f, itGeoAscii->second.valueOffset, itGeoAscii->second.count);
+                uint32_t count = itGeoAscii->second.count;
+                fullGeoAsciiParams.resize(count);
+                f.seekg(itGeoAscii->second.valueOffset);
+                f.read(&fullGeoAsciiParams[0], count);
+            }
+
+            // Parse GeoKeyDirectory (34735) to extract vertical CRS and citations
+            auto itGeoKeyDir = E.find(34735);
+            if (itGeoKeyDir != E.end() && itGeoKeyDir->second.type == 3) { // Type 3 = SHORT
+                try {
+                    auto geoKeys = detail::parseGeoKeyDirectory(f, itGeoKeyDir->second.valueOffset);
+
+                    // Extract GTCitationGeoKey (1026) and GeogCitationGeoKey (2049)
+                    auto itGTCitation = geoKeys.find(1026);
+                    auto itGeogCitation = geoKeys.find(2049);
+                    if (itGTCitation != geoKeys.end() && itGTCitation->second.tiffTagLocation == 34737) {
+                        // Extract substring from fullGeoAsciiParams
+                        uint16_t offset = itGTCitation->second.valueOffset;
+                        uint16_t count = itGTCitation->second.count;
+                        if (offset < fullGeoAsciiParams.size()) {
+                            L.geoAsciiParams =
+                                fullGeoAsciiParams.substr(offset, count - 1); // -1 to exclude null terminator
+                        }
+                    }
+
+                    // Extract VerticalCitationGeoKey (4097)
+                    auto itVertCitation = geoKeys.find(4097);
+                    if (itVertCitation != geoKeys.end() && itVertCitation->second.tiffTagLocation == 34737) {
+                        uint16_t offset = itVertCitation->second.valueOffset;
+                        uint16_t count = itVertCitation->second.count;
+                        if (offset < fullGeoAsciiParams.size()) {
+                            L.verticalCitation =
+                                fullGeoAsciiParams.substr(offset, count - 1); // -1 to exclude null terminator
+                        }
+                    }
+
+                    // Extract VerticalDatumGeoKey (4098)
+                    auto itVertDatum = geoKeys.find(4098);
+                    if (itVertDatum != geoKeys.end() && itVertDatum->second.tiffTagLocation == 0) {
+                        L.verticalDatum = itVertDatum->second.valueOffset;
+                    }
+
+                    // Extract VerticalUnitsGeoKey (4099)
+                    auto itVertUnits = geoKeys.find(4099);
+                    if (itVertUnits != geoKeys.end() && itVertUnits->second.tiffTagLocation == 0) {
+                        L.verticalUnits = itVertUnits->second.valueOffset;
+                    }
+                } catch (const std::exception &e) {
+                    // GeoKey parsing failed, ignore
+                }
             }
 
             // Read GeoDoubleParamsTag (34736) if present
