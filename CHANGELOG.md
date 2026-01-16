@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.6] - 2026-01-16
+
+### <!-- 0 -->⛰️  Features
+
+- Add convenience helpers for GridVariant
+
 ## [0.0.5] - 2026-01-16
 
 ### <!-- 0 -->⛰️  Features
