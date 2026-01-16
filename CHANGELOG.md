@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.5] - 2026-01-16
+
+### <!-- 0 -->⛰️  Features
+
+- Add GeoTIFF enhancements for metadata and data types
+- Improve TIFF writing and GeoTIFF support
+- Feat: Bootstrap geotiv project infrastructure
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Remove old TIFF test images
+- Update dependencies and Makefile options
+
 ## [0.0.4] - 2026-01-16
 
 ### <!-- 7 -->⚙️ Miscellaneous Tasks
