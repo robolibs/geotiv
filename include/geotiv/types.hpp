@@ -334,6 +334,53 @@ namespace geotiv {
         /// Try to get grid as specific type (const version)
         template <typename T> inline const dp::Grid<T> *gridIf() const { return get_grid_if<T>(grid); }
 
+        // ============ GridVariant Convenience Helpers ============
+
+        /// Get grid rows (visits variant internally)
+        inline size_t rows() const {
+            return std::visit([](const auto &g) { return g.rows; }, grid);
+        }
+
+        /// Get grid cols (visits variant internally)
+        inline size_t cols() const {
+            return std::visit([](const auto &g) { return g.cols; }, grid);
+        }
+
+        /// Get grid resolution (visits variant internally)
+        inline double gridResolution() const {
+            return std::visit([](const auto &g) { return g.resolution; }, grid);
+        }
+
+        /// Get grid pose (visits variant internally)
+        inline dp::Pose gridPose() const {
+            return std::visit([](const auto &g) { return g.pose; }, grid);
+        }
+
+        /// Get world point for cell (r, c) - visits variant internally
+        inline dp::Point getPoint(size_t r, size_t c) const {
+            return std::visit([r, c](const auto &g) { return g.get_point(r, c); }, grid);
+        }
+
+        /// Visit the grid with a callable (handles all types)
+        template <typename F> auto visitGrid(F &&func) { return std::visit(std::forward<F>(func), grid); }
+
+        template <typename F> auto visitGrid(F &&func) const { return std::visit(std::forward<F>(func), grid); }
+
+        /// Type-safe accessor returning dp::Optional (non-owning reference)
+        template <typename T> inline dp::Optional<std::reference_wrapper<dp::Grid<T>>> gridOpt() {
+            auto *ptr = gridIf<T>();
+            if (ptr)
+                return std::ref(*ptr);
+            return dp::nullopt;
+        }
+
+        template <typename T> inline dp::Optional<std::reference_wrapper<const dp::Grid<T>>> gridOpt() const {
+            const auto *ptr = gridIf<T>();
+            if (ptr)
+                return std::cref(*ptr);
+            return dp::nullopt;
+        }
+
         /// Set a custom tag with validation
         /// Throws std::runtime_error if tag is in reserved TIFF range (0-32767)
         inline void setCustomTag(uint16_t tag, const std::vector<uint32_t> &values) {
