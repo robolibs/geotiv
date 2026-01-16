@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.4] - 2026-01-16
+
+### <!-- 7 -->⚙️ Miscellaneous Tasks
+
+- Update dependency versions
+
 ## [0.0.3] - 2026-01-03
 
 ### <!-- 0 -->⛰️  Features

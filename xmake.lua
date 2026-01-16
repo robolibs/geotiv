@@ -2,18 +2,18 @@
 -- NOTE: Due to xmake description domain limitations, PROJECT_NAME must be hardcoded
 --       and kept in sync with the NAME file. The VERSION is read dynamically.
 local PROJECT_NAME = "geotiv"
-local PROJECT_VERSION = "0.0.3"
+local PROJECT_VERSION = "0.0.4"
 
 -- Dependencies formats:
 --   Git:    {"name", "https://github.com/org/repo.git", "tag"}
 --   Local:  {"name", "../path/to/local"}  (optional: uses git if not found)
 --   System: "pkgconfig::libname" or {system = "boost"}
 local LIB_DEPS = {
-    {"datapod", "https://github.com/robolibs/datapod.git", "0.0.29"},
+    {"datapod", "https://github.com/robolibs/datapod.git", "0.0.36"},
     {"optinum", "https://github.com/robolibs/optinum.git", "0.0.16"},
     {"graphix", "https://github.com/robolibs/graphix.git", "0.0.6"},
     {"concord", "https://github.com/robolibs/concord.git", "0.0.7"},
-    {"pigment", "https://github.com/robolibs/pigment.git", "0.0.4"},
+    {"pigment", "https://github.com/robolibs/pigment.git", "0.0.6"},
 }
 local EXAMPLE_DEPS = {
     {system = "rerun_sdk"},
