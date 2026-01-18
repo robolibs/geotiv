@@ -1,11 +1,12 @@
 SHELL := /bin/bash
 
 # ==================================================================================================
-# Project configuration
+# Project configuration (parsed from PROJECT file)
 # ==================================================================================================
-PROJECT_NAME := $(shell cat NAME 2>/dev/null | tr -d '[:space:]')
+PROJECT_NAME := $(shell sed -n '/^[[:space:]]*[^#\[[:space:]]/p' PROJECT | head -1 | tr -d '[:space:]')
+PROJECT_VERSION := $(shell sed -n '/^[[:space:]]*[^#\[[:space:]]/p' PROJECT | sed -n '2p' | tr -d '[:space:]')
 ifeq ($(PROJECT_NAME),)
-    $(error Error: NAME file not found or empty)
+    $(error Error: PROJECT file not found or invalid)
 endif
 
 PROJECT_CAP  := $(shell echo $(PROJECT_NAME) | tr '[:lower:]' '[:upper:]')
@@ -110,7 +111,7 @@ endef
 # Info
 # ==================================================================================================
 $(info ------------------------------------------)
-$(info Project: $(PROJECT_NAME))
+$(info Project: $(PROJECT_NAME) v$(PROJECT_VERSION))
 $(info Build System: $(BUILD_SYSTEM))
 $(info Compiler: $(CC))
 $(info ------------------------------------------)
