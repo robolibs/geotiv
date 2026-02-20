@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.8] - 2026-02-20
+
+### <!-- 2 -->🚜 Refactor
+
+- Rename library from Geotiv to Rastkit
+
 ## [0.0.6] - 2026-01-16
 
 ### <!-- 0 -->⛰️  Features
