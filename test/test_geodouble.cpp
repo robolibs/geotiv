@@ -1,6 +1,6 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <cmath>
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -15,12 +15,12 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
     SUBCASE("Basic GeoDoubleParams round-trip") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -34,10 +34,10 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_geodouble_basic.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         REQUIRE(rc2.layers[0].geoDoubleParams.size() == 3);
         CHECK(rc2.layers[0].geoDoubleParams[0] == doctest::Approx(1.0));
@@ -50,12 +50,12 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
     SUBCASE("High precision values") {
         auto grid = dp::make_grid<double>(rows, cols, cellSize, true, shift, 0.0);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -76,10 +76,10 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_geodouble_precision.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify precision
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         REQUIRE(rc2.layers[0].geoDoubleParams.size() == 5);
         CHECK(rc2.layers[0].geoDoubleParams[0] == doctest::Approx(3.141592653589793).epsilon(1e-15));
@@ -94,12 +94,12 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
     SUBCASE("Empty GeoDoubleParams (tag should not be written)") {
         auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{128});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -113,10 +113,10 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_geodouble_empty.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify tag is not present
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].geoDoubleParams.empty());
 
@@ -126,12 +126,12 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
     SUBCASE("Single double value") {
         auto grid = dp::make_grid<int16_t>(rows, cols, cellSize, true, shift, int16_t{0});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -145,10 +145,10 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_geodouble_single.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         REQUIRE(rc2.layers[0].geoDoubleParams.size() == 1);
         CHECK(rc2.layers[0].geoDoubleParams[0] == doctest::Approx(42.123456789));
@@ -159,12 +159,12 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
     SUBCASE("Many double values") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -184,10 +184,10 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_geodouble_many.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         REQUIRE(rc2.layers[0].geoDoubleParams.size() == 100);
         for (int i = 0; i < 100; ++i) {
@@ -200,12 +200,12 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
     SUBCASE("Negative and zero values") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -219,10 +219,10 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_geodouble_negative.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         REQUIRE(rc2.layers[0].geoDoubleParams.size() == 5);
         CHECK(rc2.layers[0].geoDoubleParams[0] == doctest::Approx(-123.456));
@@ -237,12 +237,12 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
     SUBCASE("Verify GeoDoubleParamsTag (34736) is written") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -256,7 +256,7 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_geodouble_tag34736.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Parse IFD to verify tag 34736 exists
         std::ifstream f(testFile, std::ios::binary);
@@ -290,12 +290,12 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
     SUBCASE("Special double values (infinity, very large/small)") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -312,10 +312,10 @@ TEST_CASE("GeoDoubleParamsTag (34736) support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_geodouble_special.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         REQUIRE(rc2.layers[0].geoDoubleParams.size() == 5);
         CHECK(rc2.layers[0].geoDoubleParams[0] == doctest::Approx(1e308));

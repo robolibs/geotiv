@@ -1,6 +1,6 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <cmath>
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -10,14 +10,14 @@ TEST_CASE("GridVariant type support") {
         auto grid = dp::make_grid<uint8_t>(10, 10, 1.0, true, dp::Pose{}, uint8_t{0});
         grid(5, 5) = 255;
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 8);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::UnsignedInt);
-        CHECK(geotiv::holds_grid_type<uint8_t>(variant));
-        CHECK_FALSE(geotiv::holds_grid_type<uint16_t>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 8);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::UnsignedInt);
+        CHECK(rastkit::holds_grid_type<uint8_t>(variant));
+        CHECK_FALSE(rastkit::holds_grid_type<uint16_t>(variant));
 
-        auto &g = geotiv::get_grid<uint8_t>(variant);
+        auto &g = rastkit::get_grid<uint8_t>(variant);
         CHECK(g(5, 5) == 255);
     }
 
@@ -26,13 +26,13 @@ TEST_CASE("GridVariant type support") {
         grid(5, 5) = -128;
         grid(6, 6) = 127;
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 8);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::SignedInt);
-        CHECK(geotiv::holds_grid_type<int8_t>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 8);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::SignedInt);
+        CHECK(rastkit::holds_grid_type<int8_t>(variant));
 
-        auto &g = geotiv::get_grid<int8_t>(variant);
+        auto &g = rastkit::get_grid<int8_t>(variant);
         CHECK(g(5, 5) == -128);
         CHECK(g(6, 6) == 127);
     }
@@ -42,13 +42,13 @@ TEST_CASE("GridVariant type support") {
         grid(5, 5) = 65535;
         grid(6, 6) = 1000;
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 16);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::UnsignedInt);
-        CHECK(geotiv::holds_grid_type<uint16_t>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 16);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::UnsignedInt);
+        CHECK(rastkit::holds_grid_type<uint16_t>(variant));
 
-        auto &g = geotiv::get_grid<uint16_t>(variant);
+        auto &g = rastkit::get_grid<uint16_t>(variant);
         CHECK(g(5, 5) == 65535);
         CHECK(g(6, 6) == 1000);
     }
@@ -58,13 +58,13 @@ TEST_CASE("GridVariant type support") {
         grid(5, 5) = -32768;
         grid(6, 6) = 32767;
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 16);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::SignedInt);
-        CHECK(geotiv::holds_grid_type<int16_t>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 16);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::SignedInt);
+        CHECK(rastkit::holds_grid_type<int16_t>(variant));
 
-        auto &g = geotiv::get_grid<int16_t>(variant);
+        auto &g = rastkit::get_grid<int16_t>(variant);
         CHECK(g(5, 5) == -32768);
         CHECK(g(6, 6) == 32767);
     }
@@ -74,13 +74,13 @@ TEST_CASE("GridVariant type support") {
         grid(5, 5) = 4294967295U;
         grid(6, 6) = 1000000;
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 32);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::UnsignedInt);
-        CHECK(geotiv::holds_grid_type<uint32_t>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 32);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::UnsignedInt);
+        CHECK(rastkit::holds_grid_type<uint32_t>(variant));
 
-        auto &g = geotiv::get_grid<uint32_t>(variant);
+        auto &g = rastkit::get_grid<uint32_t>(variant);
         CHECK(g(5, 5) == 4294967295U);
         CHECK(g(6, 6) == 1000000);
     }
@@ -90,13 +90,13 @@ TEST_CASE("GridVariant type support") {
         grid(5, 5) = -2147483648;
         grid(6, 6) = 2147483647;
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 32);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::SignedInt);
-        CHECK(geotiv::holds_grid_type<int32_t>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 32);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::SignedInt);
+        CHECK(rastkit::holds_grid_type<int32_t>(variant));
 
-        auto &g = geotiv::get_grid<int32_t>(variant);
+        auto &g = rastkit::get_grid<int32_t>(variant);
         CHECK(g(5, 5) == -2147483648);
         CHECK(g(6, 6) == 2147483647);
     }
@@ -106,13 +106,13 @@ TEST_CASE("GridVariant type support") {
         grid(5, 5) = 3.14159f;
         grid(6, 6) = -1.5e10f;
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 32);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::Float);
-        CHECK(geotiv::holds_grid_type<float>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 32);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::Float);
+        CHECK(rastkit::holds_grid_type<float>(variant));
 
-        auto &g = geotiv::get_grid<float>(variant);
+        auto &g = rastkit::get_grid<float>(variant);
         CHECK(g(5, 5) == doctest::Approx(3.14159f));
         CHECK(g(6, 6) == doctest::Approx(-1.5e10f));
     }
@@ -122,48 +122,48 @@ TEST_CASE("GridVariant type support") {
         grid(5, 5) = 3.141592653589793;
         grid(6, 6) = -1.5e100;
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 64);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::Float);
-        CHECK(geotiv::holds_grid_type<double>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 64);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::Float);
+        CHECK(rastkit::holds_grid_type<double>(variant));
 
-        auto &g = geotiv::get_grid<double>(variant);
+        auto &g = rastkit::get_grid<double>(variant);
         CHECK(g(5, 5) == doctest::Approx(3.141592653589793));
         CHECK(g(6, 6) == doctest::Approx(-1.5e100));
     }
 
     SUBCASE("get_grid_dimensions helper") {
         auto grid = dp::make_grid<uint16_t>(20, 30, 1.0, true, dp::Pose{}, uint16_t{0});
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        auto [rows, cols] = geotiv::get_grid_dimensions(variant);
+        auto [rows, cols] = rastkit::get_grid_dimensions(variant);
         CHECK(rows == 20);
         CHECK(cols == 30);
     }
 
     SUBCASE("get_grid_resolution helper") {
         auto grid = dp::make_grid<float>(10, 10, 2.5, true, dp::Pose{}, 0.0f);
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_grid_resolution(variant) == doctest::Approx(2.5));
+        CHECK(rastkit::get_grid_resolution(variant) == doctest::Approx(2.5));
     }
 
     SUBCASE("RGBA grid") {
-        auto grid = dp::make_grid<geotiv::RGBA>(10, 10, 1.0, true, dp::Pose{}, geotiv::RGBA{});
-        grid(5, 5) = geotiv::RGBA{255, 128, 64, 200};
-        grid(6, 6) = geotiv::RGBA{0, 0, 0, 255};
+        auto grid = dp::make_grid<rastkit::RGBA>(10, 10, 1.0, true, dp::Pose{}, rastkit::RGBA{});
+        grid(5, 5) = rastkit::RGBA{255, 128, 64, 200};
+        grid(6, 6) = rastkit::RGBA{0, 0, 0, 255};
 
-        geotiv::GridVariant variant = std::move(grid);
+        rastkit::GridVariant variant = std::move(grid);
 
-        CHECK(geotiv::get_bits_per_sample(variant) == 8);
-        CHECK(geotiv::get_sample_format(variant) == geotiv::SampleFormat::UnsignedInt);
-        CHECK(geotiv::get_samples_per_pixel(variant) == 4);
-        CHECK(geotiv::get_photometric_interpretation(variant) == geotiv::PhotometricInterpretation::RGB);
-        CHECK(geotiv::is_color_grid(variant));
-        CHECK(geotiv::holds_grid_type<geotiv::RGBA>(variant));
+        CHECK(rastkit::get_bits_per_sample(variant) == 8);
+        CHECK(rastkit::get_sample_format(variant) == rastkit::SampleFormat::UnsignedInt);
+        CHECK(rastkit::get_samples_per_pixel(variant) == 4);
+        CHECK(rastkit::get_photometric_interpretation(variant) == rastkit::PhotometricInterpretation::RGB);
+        CHECK(rastkit::is_color_grid(variant));
+        CHECK(rastkit::holds_grid_type<rastkit::RGBA>(variant));
 
-        auto &g = geotiv::get_grid<geotiv::RGBA>(variant);
+        auto &g = rastkit::get_grid<rastkit::RGBA>(variant);
         CHECK(g(5, 5).r == 255);
         CHECK(g(5, 5).g == 128);
         CHECK(g(5, 5).b == 64);
@@ -173,12 +173,12 @@ TEST_CASE("GridVariant type support") {
 
 TEST_CASE("Layer GridVariant convenience methods") {
     SUBCASE("Layer with uint8_t grid") {
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         auto grid = dp::make_grid<uint8_t>(10, 10, 1.0, true, dp::Pose{}, uint8_t{128});
         layer.grid = std::move(grid);
 
         CHECK(layer.bitsPerSample() == 8);
-        CHECK(layer.sampleFormat() == geotiv::SampleFormat::UnsignedInt);
+        CHECK(layer.sampleFormat() == rastkit::SampleFormat::UnsignedInt);
         CHECK(layer.holdsType<uint8_t>());
         CHECK_FALSE(layer.holdsType<float>());
 
@@ -187,12 +187,12 @@ TEST_CASE("Layer GridVariant convenience methods") {
     }
 
     SUBCASE("Layer with float grid") {
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         auto grid = dp::make_grid<float>(10, 10, 1.0, true, dp::Pose{}, 1.5f);
         layer.grid = std::move(grid);
 
         CHECK(layer.bitsPerSample() == 32);
-        CHECK(layer.sampleFormat() == geotiv::SampleFormat::Float);
+        CHECK(layer.sampleFormat() == rastkit::SampleFormat::Float);
         CHECK(layer.holdsType<float>());
 
         auto *g = layer.gridIf<float>();
@@ -204,18 +204,18 @@ TEST_CASE("Layer GridVariant convenience methods") {
     }
 
     SUBCASE("Layer with RGBA grid") {
-        geotiv::Layer layer;
-        auto grid = dp::make_grid<geotiv::RGBA>(10, 10, 1.0, true, dp::Pose{}, geotiv::RGBA{255, 128, 64, 200});
+        rastkit::Layer layer;
+        auto grid = dp::make_grid<rastkit::RGBA>(10, 10, 1.0, true, dp::Pose{}, rastkit::RGBA{255, 128, 64, 200});
         layer.grid = std::move(grid);
 
         CHECK(layer.bitsPerSample() == 8);
-        CHECK(layer.sampleFormat() == geotiv::SampleFormat::UnsignedInt);
-        CHECK(layer.photometricInterpretation() == geotiv::PhotometricInterpretation::RGB);
+        CHECK(layer.sampleFormat() == rastkit::SampleFormat::UnsignedInt);
+        CHECK(layer.photometricInterpretation() == rastkit::PhotometricInterpretation::RGB);
         CHECK(layer.isColorLayer());
-        CHECK(layer.holdsType<geotiv::RGBA>());
+        CHECK(layer.holdsType<rastkit::RGBA>());
         CHECK_FALSE(layer.holdsType<uint8_t>());
 
-        auto *g = layer.gridIf<geotiv::RGBA>();
+        auto *g = layer.gridIf<rastkit::RGBA>();
         REQUIRE(g != nullptr);
         CHECK((*g)(0, 0).r == 255);
         CHECK((*g)(0, 0).g == 128);
@@ -235,12 +235,12 @@ TEST_CASE("Round-trip write/read for different grid types") {
         grid(2, 2) = 32768;
         grid(4, 4) = 65535;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = resolution;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = 5;
         layer.height = 5;
@@ -252,9 +252,9 @@ TEST_CASE("Round-trip write/read for different grid types") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_uint16.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].holdsType<uint16_t>());
 
@@ -272,12 +272,12 @@ TEST_CASE("Round-trip write/read for different grid types") {
         grid(2, 2) = 0;
         grid(4, 4) = 32767;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = resolution;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = 5;
         layer.height = 5;
@@ -289,9 +289,9 @@ TEST_CASE("Round-trip write/read for different grid types") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_int16.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].holdsType<int16_t>());
 
@@ -309,12 +309,12 @@ TEST_CASE("Round-trip write/read for different grid types") {
         grid(2, 2) = 3.14159f;
         grid(4, 4) = 1.0e-10f;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = resolution;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = 5;
         layer.height = 5;
@@ -326,9 +326,9 @@ TEST_CASE("Round-trip write/read for different grid types") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_float.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].holdsType<float>());
 
@@ -346,12 +346,12 @@ TEST_CASE("Round-trip write/read for different grid types") {
         grid(2, 2) = 3.141592653589793;
         grid(4, 4) = 1.0e-100;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = resolution;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = 5;
         layer.height = 5;
@@ -363,9 +363,9 @@ TEST_CASE("Round-trip write/read for different grid types") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_double.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].holdsType<double>());
 
@@ -383,12 +383,12 @@ TEST_CASE("Round-trip write/read for different grid types") {
         grid(2, 2) = 2147483648U;
         grid(4, 4) = 4294967295U;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = resolution;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = 5;
         layer.height = 5;
@@ -400,9 +400,9 @@ TEST_CASE("Round-trip write/read for different grid types") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_uint32.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].holdsType<uint32_t>());
 
@@ -420,12 +420,12 @@ TEST_CASE("Round-trip write/read for different grid types") {
         grid(2, 2) = 0;
         grid(4, 4) = 2147483647;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = resolution;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = 5;
         layer.height = 5;
@@ -437,9 +437,9 @@ TEST_CASE("Round-trip write/read for different grid types") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_int32.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].holdsType<int32_t>());
 
@@ -452,18 +452,18 @@ TEST_CASE("Round-trip write/read for different grid types") {
     }
 
     SUBCASE("RGBA round-trip") {
-        auto grid = dp::make_grid<geotiv::RGBA>(5, 5, resolution, true, shift, geotiv::RGBA{});
-        grid(0, 0) = geotiv::RGBA{255, 0, 0, 255};     // Red
-        grid(2, 2) = geotiv::RGBA{0, 255, 0, 128};     // Green with 50% alpha
-        grid(4, 4) = geotiv::RGBA{0, 0, 255, 0};       // Blue fully transparent
-        grid(1, 3) = geotiv::RGBA{128, 128, 128, 255}; // Gray
+        auto grid = dp::make_grid<rastkit::RGBA>(5, 5, resolution, true, shift, rastkit::RGBA{});
+        grid(0, 0) = rastkit::RGBA{255, 0, 0, 255};     // Red
+        grid(2, 2) = rastkit::RGBA{0, 255, 0, 128};     // Green with 50% alpha
+        grid(4, 4) = rastkit::RGBA{0, 0, 255, 0};       // Blue fully transparent
+        grid(1, 3) = rastkit::RGBA{128, 128, 128, 255}; // Gray
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = resolution;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = 5;
         layer.height = 5;
@@ -475,14 +475,14 @@ TEST_CASE("Round-trip write/read for different grid types") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_rgba.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
-        CHECK(rc2.layers[0].holdsType<geotiv::RGBA>());
+        CHECK(rc2.layers[0].holdsType<rastkit::RGBA>());
         CHECK(rc2.layers[0].isColorLayer());
 
-        auto &g = rc2.layers[0].gridAs<geotiv::RGBA>();
+        auto &g = rc2.layers[0].gridAs<rastkit::RGBA>();
         CHECK(g(0, 0).r == 255);
         CHECK(g(0, 0).g == 0);
         CHECK(g(0, 0).b == 0);
@@ -510,30 +510,30 @@ TEST_CASE("Round-trip write/read for different grid types") {
 TEST_CASE("Custom tag validation") {
     SUBCASE("is_valid_custom_tag returns correct values") {
         // Reserved TIFF tags (0-32767) should be invalid
-        CHECK_FALSE(geotiv::is_valid_custom_tag(0));
-        CHECK_FALSE(geotiv::is_valid_custom_tag(256));   // ImageWidth
-        CHECK_FALSE(geotiv::is_valid_custom_tag(339));   // SampleFormat
-        CHECK_FALSE(geotiv::is_valid_custom_tag(32767)); // Last reserved
+        CHECK_FALSE(rastkit::is_valid_custom_tag(0));
+        CHECK_FALSE(rastkit::is_valid_custom_tag(256));   // ImageWidth
+        CHECK_FALSE(rastkit::is_valid_custom_tag(339));   // SampleFormat
+        CHECK_FALSE(rastkit::is_valid_custom_tag(32767)); // Last reserved
 
         // Private range (32768+) should be valid
-        CHECK(geotiv::is_valid_custom_tag(32768)); // First private
-        CHECK(geotiv::is_valid_custom_tag(50000)); // geotiv reserved start
-        CHECK(geotiv::is_valid_custom_tag(50100)); // Global properties base
-        CHECK(geotiv::is_valid_custom_tag(50999)); // geotiv reserved end
-        CHECK(geotiv::is_valid_custom_tag(65535)); // Max tag
+        CHECK(rastkit::is_valid_custom_tag(32768)); // First private
+        CHECK(rastkit::is_valid_custom_tag(50000)); // rastkit reserved start
+        CHECK(rastkit::is_valid_custom_tag(50100)); // Global properties base
+        CHECK(rastkit::is_valid_custom_tag(50999)); // rastkit reserved end
+        CHECK(rastkit::is_valid_custom_tag(65535)); // Max tag
     }
 
     SUBCASE("validate_custom_tag throws for reserved tags") {
-        CHECK_THROWS_AS(geotiv::validate_custom_tag(0), std::runtime_error);
-        CHECK_THROWS_AS(geotiv::validate_custom_tag(256), std::runtime_error);
-        CHECK_THROWS_AS(geotiv::validate_custom_tag(32767), std::runtime_error);
+        CHECK_THROWS_AS(rastkit::validate_custom_tag(0), std::runtime_error);
+        CHECK_THROWS_AS(rastkit::validate_custom_tag(256), std::runtime_error);
+        CHECK_THROWS_AS(rastkit::validate_custom_tag(32767), std::runtime_error);
 
-        CHECK_NOTHROW(geotiv::validate_custom_tag(32768));
-        CHECK_NOTHROW(geotiv::validate_custom_tag(50100));
+        CHECK_NOTHROW(rastkit::validate_custom_tag(32768));
+        CHECK_NOTHROW(rastkit::validate_custom_tag(50100));
     }
 
     SUBCASE("Layer.setCustomTag validates tag numbers") {
-        geotiv::Layer layer;
+        rastkit::Layer layer;
 
         // Valid tags should work
         CHECK_NOTHROW(layer.setCustomTag(50000, 123));
@@ -545,7 +545,7 @@ TEST_CASE("Custom tag validation") {
     }
 
     SUBCASE("Layer.getCustomTag and hasCustomTag work correctly") {
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.setCustomTag(50001, 42);
         layer.setCustomTag(50002, std::vector<uint32_t>{10, 20, 30});
 
@@ -567,8 +567,8 @@ TEST_CASE("Custom tag validation") {
         CHECK(val3.empty());
     }
 
-    SUBCASE("Global properties still work (in geotiv reserved range)") {
-        geotiv::Layer layer;
+    SUBCASE("Global properties still work (in rastkit reserved range)") {
+        rastkit::Layer layer;
 
         // Global properties should work without throwing
         CHECK_NOTHROW(layer.setGlobalProperty("test_key", "test_value"));
@@ -581,7 +581,7 @@ TEST_CASE("Custom tag validation") {
 
 TEST_CASE("Layer structure tests") {
     SUBCASE("Default Layer construction") {
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         CHECK(layer.ifdOffset == 0);
         CHECK(layer.width == 0);
         CHECK(layer.height == 0);
@@ -592,7 +592,7 @@ TEST_CASE("Layer structure tests") {
     }
 
     SUBCASE("Layer with dimensions") {
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.width = 100;
         layer.height = 50;
         layer.samplesPerPixel = 1;
@@ -607,7 +607,7 @@ TEST_CASE("Layer structure tests") {
 
 TEST_CASE("RasterCollection structure tests") {
     SUBCASE("Default RasterCollection construction") {
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         CHECK(rc.layers.empty());
         // CRS is always WGS84 by default
         CHECK(rc.datum.latitude == 0.0);
@@ -619,7 +619,7 @@ TEST_CASE("RasterCollection structure tests") {
     }
 
     SUBCASE("RasterCollection with custom values") {
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = dp::Geo{48.0, 11.0, 500.0};
         double yaw_rad = 45.0 * M_PI / 180.0; // Convert degrees to radians
@@ -636,9 +636,9 @@ TEST_CASE("RasterCollection structure tests") {
     }
 
     SUBCASE("RasterCollection with layers") {
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
 
-        geotiv::Layer layer1, layer2;
+        rastkit::Layer layer1, layer2;
         layer1.width = 100;
         layer1.height = 50;
         layer2.width = 200;

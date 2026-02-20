@@ -1,6 +1,6 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <cmath>
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -24,12 +24,12 @@ TEST_CASE("Coordinate precision at different latitudes") {
             auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{128});
 
             // Create RasterCollection
-            geotiv::RasterCollection rc;
+            rastkit::RasterCollection rc;
             rc.datum = datum;
             rc.shift = shift;
             rc.resolution = cellSize;
 
-            geotiv::Layer layer;
+            rastkit::Layer layer;
             layer.grid = std::move(grid);
             layer.width = static_cast<uint32_t>(cols);
             layer.height = static_cast<uint32_t>(rows);
@@ -43,10 +43,10 @@ TEST_CASE("Coordinate precision at different latitudes") {
 
             // Write to file
             std::string testFile = std::string("test_precision_") + location + ".tif";
-            geotiv::WriteRasterCollection(rc, testFile);
+            rastkit::WriteRasterCollection(rc, testFile);
 
             // Read back
-            auto rc2 = geotiv::ReadRasterCollection(testFile);
+            auto rc2 = rastkit::ReadRasterCollection(testFile);
             REQUIRE(rc2.layers.size() == 1);
 
             const auto &grid2 = rc2.layers[0].gridAs<uint8_t>();
@@ -112,12 +112,12 @@ TEST_CASE("Precision with large ENU offsets") {
 
         auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{64});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -130,9 +130,9 @@ TEST_CASE("Precision with large ENU offsets") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_precision_large_offset.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         const auto &grid2 = rc2.layers[0].gridAs<uint8_t>();
 
         // Check corner points
@@ -160,12 +160,12 @@ TEST_CASE("Precision with large ENU offsets") {
 
         auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{64});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -178,9 +178,9 @@ TEST_CASE("Precision with large ENU offsets") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_precision_10km_offset.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         const auto &grid2 = rc2.layers[0].gridAs<uint8_t>();
 
         auto orig_00 = rc.layers[0].gridAs<uint8_t>().get_point(0, 0);
@@ -210,12 +210,12 @@ TEST_CASE("Precision with fine resolutions") {
 
         auto grid = dp::make_grid<uint16_t>(rows, cols, cellSize, true, shift, uint16_t{1000});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -228,9 +228,9 @@ TEST_CASE("Precision with fine resolutions") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_precision_10cm.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
 
         // Check resolution preservation
         double resolution_error = std::abs(rc2.layers[0].resolution - cellSize);
@@ -266,12 +266,12 @@ TEST_CASE("Precision with rotation") {
 
         auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{128});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -284,9 +284,9 @@ TEST_CASE("Precision with rotation") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_precision_rotation.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         const auto &grid2 = rc2.layers[0].gridAs<uint8_t>();
 
         // Test multiple points
@@ -324,12 +324,12 @@ TEST_CASE("Resolution conversion precision") {
         for (double res : resolutions) {
             auto grid = dp::make_grid<uint8_t>(5, 5, res, true, shift, uint8_t{0});
 
-            geotiv::RasterCollection rc;
+            rastkit::RasterCollection rc;
             rc.datum = datum;
             rc.shift = shift;
             rc.resolution = res;
 
-            geotiv::Layer layer;
+            rastkit::Layer layer;
             layer.grid = std::move(grid);
             layer.width = 5;
             layer.height = 5;
@@ -342,9 +342,9 @@ TEST_CASE("Resolution conversion precision") {
             rc.layers.push_back(std::move(layer));
 
             std::string testFile = "test_resolution_" + std::to_string(res) + ".tif";
-            geotiv::WriteRasterCollection(rc, testFile);
+            rastkit::WriteRasterCollection(rc, testFile);
 
-            auto rc2 = geotiv::ReadRasterCollection(testFile);
+            auto rc2 = rastkit::ReadRasterCollection(testFile);
 
             double resolution_error = std::abs(rc2.layers[0].resolution - res);
             double relative_error = resolution_error / res;

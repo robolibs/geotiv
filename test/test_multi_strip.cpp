@@ -1,9 +1,9 @@
 #include <cassert>
 #include <cmath>
-#include <geotiv/geotiv.hpp>
+#include <rastkit/rastkit.hpp>
 #include <iostream>
 
-using namespace geotiv;
+using namespace rastkit;
 
 /// Test single strip mode (default for small images)
 void test_single_strip() {

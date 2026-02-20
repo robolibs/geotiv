@@ -1,7 +1,7 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
-#include "geotiv/raster.hpp"
+#include "rastkit/rastkit.hpp"
+#include "rastkit/raster.hpp"
 #include <doctest/doctest.h>
 
 TEST_CASE("Layer to GeoTIFF conversion tests") {
@@ -33,14 +33,14 @@ TEST_CASE("Layer to GeoTIFF conversion tests") {
         }
 
         // Write to file
-        REQUIRE_NOTHROW(geotiv::WriteLayerCollection(originalLayer, testFile, datum));
+        REQUIRE_NOTHROW(rastkit::WriteLayerCollection(originalLayer, testFile, datum));
 
         // Verify file exists
         CHECK(std::filesystem::exists(testFile));
 
         // Read back
         dp::Layer<uint8_t> reconstructed;
-        REQUIRE_NOTHROW(reconstructed = geotiv::ReadLayerCollection<uint8_t>(testFile));
+        REQUIRE_NOTHROW(reconstructed = rastkit::ReadLayerCollection<uint8_t>(testFile));
 
         // Verify dimensions
         CHECK(reconstructed.rows == rows);

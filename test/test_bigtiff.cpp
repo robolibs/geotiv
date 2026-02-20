@@ -1,10 +1,10 @@
 #include <cassert>
 #include <cmath>
 #include <fstream>
-#include <geotiv/geotiv.hpp>
+#include <rastkit/rastkit.hpp>
 #include <iostream>
 
-using namespace geotiv;
+using namespace rastkit;
 
 /// Helper to read bytes from a file
 std::vector<uint8_t> read_file_bytes(const std::string &path) {

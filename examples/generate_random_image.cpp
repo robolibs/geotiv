@@ -5,7 +5,7 @@
 #include <iostream>
 #include <random>
 
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <concord/concord.hpp>
 #include <datapod/datapod.hpp>
 
@@ -42,14 +42,14 @@ int main() {
         }
 
         // Create RasterCollection with proper metadata
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
         // Create layer with the same metadata
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -66,7 +66,7 @@ int main() {
 
         // Write the GeoTIFF
         std::string filename = "random_640x640.tif";
-        geotiv::WriteRasterCollection(rc, filename);
+        rastkit::WriteRasterCollection(rc, filename);
 
         std::cout << "Successfully created: " << filename << "\n";
         std::cout << "   Size: 640x640 pixels\n";

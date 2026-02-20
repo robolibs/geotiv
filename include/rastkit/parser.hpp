@@ -11,15 +11,15 @@
 #include <string>
 #include <vector>
 
-#include "geotiv/errors.hpp"
-#include "geotiv/types.hpp"
+#include "rastkit/errors.hpp"
+#include "rastkit/types.hpp"
 #include <concord/concord.hpp>
 #include <datapod/datapod.hpp>
 
 namespace dp = datapod;
 namespace cc = concord;
 
-namespace geotiv {
+namespace rastkit {
 
     namespace detail {
         struct TIFFEntry {
@@ -853,4 +853,4 @@ namespace geotiv {
         return os;
     }
 
-} // namespace geotiv
+} // namespace rastkit

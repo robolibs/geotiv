@@ -1,13 +1,13 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <cmath>
 #include <doctest/doctest.h>
 #include <filesystem>
 
 TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
     SUBCASE("Multi-layer with different coordinate systems and custom tags") {
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
 
         // Create 3 layers with different properties
         for (int i = 0; i < 3; ++i) {
@@ -27,7 +27,7 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
                 }
             }
 
-            geotiv::Layer layer;
+            rastkit::Layer layer;
             layer.grid = std::move(grid);
             layer.width = static_cast<uint32_t>(cols);
             layer.height = static_cast<uint32_t>(rows);
@@ -58,12 +58,12 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
 
         // Write multi-IFD GeoTIFF
         std::string testFile = "multi_ifd_advanced.tif";
-        REQUIRE_NOTHROW(geotiv::WriteRasterCollection(rc, testFile));
+        REQUIRE_NOTHROW(rastkit::WriteRasterCollection(rc, testFile));
         CHECK(std::filesystem::exists(testFile));
 
         // Read back and verify per-IFD metadata preservation
-        geotiv::RasterCollection readRc;
-        REQUIRE_NOTHROW(readRc = geotiv::ReadRasterCollection(testFile));
+        rastkit::RasterCollection readRc;
+        REQUIRE_NOTHROW(readRc = rastkit::ReadRasterCollection(testFile));
 
         // Verify we have all layers
         CHECK(readRc.layers.size() == 3);
@@ -101,7 +101,7 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
             }
 
             // Verify grid data integrity
-            auto [gridRows, gridCols] = geotiv::get_grid_dimensions(layer.grid);
+            auto [gridRows, gridCols] = rastkit::get_grid_dimensions(layer.grid);
             CHECK(gridRows == (10 + i * 5));
             CHECK(gridCols == (15 + i * 5));
 
@@ -116,7 +116,7 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
     }
 
     SUBCASE("Time-series data with timestamps in custom tags") {
-        geotiv::RasterCollection timeSeries;
+        rastkit::RasterCollection timeSeries;
 
         // Simulate a time series with 4 time points
         std::vector<uint32_t> timestamps = {1735689600, 1735693200, 1735696800, 1735700400}; // 1-hour intervals
@@ -137,7 +137,7 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
                 }
             }
 
-            geotiv::Layer layer;
+            rastkit::Layer layer;
             layer.grid = std::move(grid);
             layer.width = static_cast<uint32_t>(cols);
             layer.height = static_cast<uint32_t>(rows);
@@ -165,11 +165,11 @@ TEST_CASE("Advanced Multi-IFD with Per-Layer Tags and Metadata") {
 
         // Write time-series GeoTIFF
         std::string timeSeriesFile = "time_series.tif";
-        REQUIRE_NOTHROW(geotiv::WriteRasterCollection(timeSeries, timeSeriesFile));
+        REQUIRE_NOTHROW(rastkit::WriteRasterCollection(timeSeries, timeSeriesFile));
 
         // Read back and verify temporal metadata
-        geotiv::RasterCollection readTimeSeries;
-        REQUIRE_NOTHROW(readTimeSeries = geotiv::ReadRasterCollection(timeSeriesFile));
+        rastkit::RasterCollection readTimeSeries;
+        REQUIRE_NOTHROW(readTimeSeries = rastkit::ReadRasterCollection(timeSeriesFile));
 
         CHECK(readTimeSeries.layers.size() == 4);
 

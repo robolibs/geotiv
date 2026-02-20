@@ -1,6 +1,6 @@
 <img align="right" width="26%" src="./misc/logo.png">
 
-# Geotiv
+# Rastkit
 
 A modern C++20 library for reading and writing GeoTIFF files with integrated geospatial coordinate system support.
 
@@ -21,10 +21,10 @@ A modern C++20 library for reading and writing GeoTIFF files with integrated geo
 ### Basic Usage
 
 ```cpp
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 
 // Read a GeoTIFF file
-auto rasterCollection = geotiv::ReadRasterCollection("input.tif");
+auto rasterCollection = rastkit::ReadRasterCollection("input.tif");
 
 // Access georeferenced data
 const auto& layer = rasterCollection.layers[0];
@@ -34,7 +34,7 @@ const auto& grid = layer.grid;
 uint8_t pixelValue = grid(row, col);
 
 // Write modified data back to GeoTIFF
-geotiv::WriteRasterCollection(rasterCollection, "output.tif");
+rastkit::WriteRasterCollection(rasterCollection, "output.tif");
 ```
 
 ### Creating GeoTIFF from Scratch
@@ -46,7 +46,7 @@ concord::Pose shift{concord::Point{100.0, 200.0, 0.0},     // ENU position: 100m
                     concord::Euler{0, 0, 0}};               // No rotation
 double resolution = 2.0;                                    // 2 meters per pixel
 
-geotiv::Raster raster(datum, shift, resolution);
+rastkit::Raster raster(datum, shift, resolution);
 
 // Add a grid layer
 uint32_t width = 200, height = 100;
@@ -68,14 +68,14 @@ raster.toFile("generated.tif");
 
 ### Data Structures
 
-- **`geotiv::Raster`**: High-level interface for creating and managing georeferenced raster data
-- **`geotiv::RasterCollection`**: Container for one or more georeferenced raster layers
-- **`geotiv::Layer`**: Individual raster layer with pixel data and metadata
+- **`rastkit::Raster`**: High-level interface for creating and managing georeferenced raster data
+- **`rastkit::RasterCollection`**: Container for one or more georeferenced raster layers
+- **`rastkit::Layer`**: Individual raster layer with pixel data and metadata
 - **`concord::Grid<uint8_t>`**: Georeferenced grid with ENU shift-based positioning
 
 ### Multi-IFD (Image File Directory) Support
 
-Geotiv provides comprehensive support for multi-IFD GeoTIFF files, where each IFD represents a separate image layer with its own metadata and geospatial properties:
+Rastkit provides comprehensive support for multi-IFD GeoTIFF files, where each IFD represents a separate image layer with its own metadata and geospatial properties:
 
 #### IFD-Specific Features:
 - **Independent Geospatial Parameters**: Each layer can have its own datum, ENU shift, and resolution
@@ -88,7 +88,7 @@ Geotiv provides comprehensive support for multi-IFD GeoTIFF files, where each IF
 
 #### Per-Layer Metadata:
 ```cpp
-geotiv::Layer layer;
+rastkit::Layer layer;
 layer.datum = {47.5, 8.5, 200.0};       // WGS84 reference point (lat, lon, alt)
 layer.shift = {concord::Point{100, 200, 0}, concord::Euler{0, 0, 0.5}}; // ENU position and rotation
 layer.resolution = 2.0;                  // Meters per pixel
@@ -98,11 +98,11 @@ layer.customTags[50000] = {42, 100};     // Custom application tags
 
 #### Multi-Layer Example:
 ```cpp
-geotiv::RasterCollection rc;
+rastkit::RasterCollection rc;
 
 // Create multiple layers with different properties
 for (int i = 0; i < 3; ++i) {
-    geotiv::Layer layer;
+    rastkit::Layer layer;
     layer.datum = {47.0 + i * 0.1, 8.0 + i * 0.1, 100.0 + i * 50};
     layer.shift = {concord::Point{i * 50.0, i * 100.0, 0}, concord::Euler{0, 0, i * 0.1}};
     layer.resolution = 1.0 + i * 0.5;
@@ -116,18 +116,18 @@ for (int i = 0; i < 3; ++i) {
 }
 
 // Write multi-IFD GeoTIFF - each layer becomes its own IFD
-geotiv::WriteRasterCollection(rc, "multi_layer.tif");
+rastkit::WriteRasterCollection(rc, "multi_layer.tif");
 ```
 
 ### I/O Functions
 
-- **`geotiv::ReadRasterCollection()`**: Parse GeoTIFF files into structured data
-- **`geotiv::WriteRasterCollection()`**: Export raster collections to GeoTIFF format
-- **`geotiv::toTiffBytes()`**: Generate raw TIFF byte data for custom handling
+- **`rastkit::ReadRasterCollection()`**: Parse GeoTIFF files into structured data
+- **`rastkit::WriteRasterCollection()`**: Export raster collections to GeoTIFF format
+- **`rastkit::toTiffBytes()`**: Generate raw TIFF byte data for custom handling
 
 ### Coordinate System Support
 
-Geotiv uses a shift-based coordinate system for maximum flexibility and precision:
+Rastkit uses a shift-based coordinate system for maximum flexibility and precision:
 
 #### ENU Shift-Based Positioning
 - **WGS84 Reference**: All coordinate systems use WGS84 with EPSG:4326
@@ -147,7 +147,7 @@ concord::Pose shift{concord::Point{100.0, 200.0, 0.0},     // ENU position: 100m
                     concord::Euler{0, 0, 0.5}};             // 0.5 radians yaw rotation
 
 // The raster will be positioned at datum + shift in ENU space
-geotiv::Raster raster(datum, shift, resolution);
+rastkit::Raster raster(datum, shift, resolution);
 ```
 
 ## 📊 Supported Features
@@ -207,22 +207,22 @@ layer.customTags[50001] = {timestamp_value};   // Application-specific tags
 ```cmake
 include(FetchContent)
 FetchContent_Declare(
-    geotiv
-    GIT_REPOSITORY https://github.com/your-org/geotiv.git
+    rastkit
+    GIT_REPOSITORY https://github.com/your-org/rastkit.git
     GIT_TAG main
 )
-FetchContent_MakeAvailable(geotiv)
+FetchContent_MakeAvailable(rastkit)
 
-target_link_libraries(your_target geotiv::geotiv)
+target_link_libraries(your_target rastkit::rastkit)
 ```
 
 ### Manual Build
 
 ```bash
-git clone https://github.com/your-org/geotiv.git
-cd geotiv
+git clone https://github.com/your-org/rastkit.git
+cd rastkit
 mkdir build && cd build
-cmake -DGEOTIV_BUILD_EXAMPLES=ON -DGEOTIV_ENABLE_TESTS=ON ..
+cmake -DRASTKIT_BUILD_EXAMPLES=ON -DRASTKIT_ENABLE_TESTS=ON ..
 make -j$(nproc)
 ```
 
@@ -258,10 +258,10 @@ make test
 
 ### Example: Time-Series Multi-IFD GeoTIFF
 ```cpp
-geotiv::RasterCollection timeSeries;
+rastkit::RasterCollection timeSeries;
 
 for (const auto& timestamp : timestamps) {
-    geotiv::Layer layer;
+    rastkit::Layer layer;
     layer.datum = surveyLocation;
     layer.shift = {concord::Point{0, 0, 0}, concord::Euler{0, 0, 0}}; // No spatial offset
     layer.resolution = 0.5; // 50cm resolution
@@ -278,12 +278,12 @@ for (const auto& timestamp : timestamps) {
     timeSeries.layers.push_back(std::move(layer));
 }
 
-geotiv::WriteRasterCollection(timeSeries, "temporal_survey.tif");
+rastkit::WriteRasterCollection(timeSeries, "temporal_survey.tif");
 ```
 
 ## 🌐 Shift-Based Coordinate System
 
-Geotiv uses a sophisticated shift-based coordinate system that provides both precision and flexibility:
+Rastkit uses a sophisticated shift-based coordinate system that provides both precision and flexibility:
 
 ### **Datum vs Shift**
 - **Datum**: WGS84 reference point (lat, lon, alt) for coordinate transformations
@@ -303,7 +303,7 @@ concord::Datum surveyDatum{52.1234, 5.6789, 45.0};
 concord::Pose gridShift{concord::Point{150.0, 300.0, 0.0}, 
                         concord::Euler{0, 0, 0.262}};  // 15 degrees in radians
 
-geotiv::Raster raster(surveyDatum, gridShift, 0.5);  // 50cm resolution
+rastkit::Raster raster(surveyDatum, gridShift, 0.5);  // 50cm resolution
 ```
 
 ### **Storage Format**

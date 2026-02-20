@@ -12,7 +12,7 @@
 
 - Add GeoTIFF enhancements for metadata and data types
 - Improve TIFF writing and GeoTIFF support
-- Feat: Bootstrap geotiv project infrastructure
+- Feat: Bootstrap rastkit project infrastructure
 
 ### <!-- 7 -->⚙️ Miscellaneous Tasks
 
@@ -65,7 +65,7 @@
 ### <!-- 0 -->⛰️  Features
 
 - Introduce comprehensive build system and dependency management
-- Convert geotiv to a header-only library
+- Convert rastkit to a header-only library
 
 ### <!-- 2 -->🚜 Refactor
 
@@ -86,7 +86,7 @@
 ### <!-- 0 -->⛰️  Features
 
 - Introduce comprehensive build system and dependency management
-- Convert geotiv to a header-only library
+- Convert rastkit to a header-only library
 
 ### <!-- 2 -->🚜 Refactor
 
@@ -219,7 +219,7 @@
 
 ### <!-- 1 -->🐛 Bug Fixes
 
-- Rename geotiff namespace to geotiv
+- Rename geotiff namespace to rastkit
 
 ## [0.2.0] - 2025-06-11
 
