@@ -1,6 +1,6 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <doctest/doctest.h>
 #include <filesystem>
 
@@ -13,12 +13,12 @@ TEST_CASE("Vertical CRS GeoKeys support") {
     SUBCASE("WGS84 ellipsoid height (default behavior)") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -33,10 +33,10 @@ TEST_CASE("Vertical CRS GeoKeys support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_vertical_wgs84.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].verticalDatum.has_value());
         CHECK(rc2.layers[0].verticalDatum.value() == 5030);
@@ -49,12 +49,12 @@ TEST_CASE("Vertical CRS GeoKeys support") {
     SUBCASE("EGM96 geoid") {
         auto grid = dp::make_grid<double>(rows, cols, cellSize, true, shift, 0.0);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -70,10 +70,10 @@ TEST_CASE("Vertical CRS GeoKeys support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_vertical_egm96.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].verticalDatum.has_value());
         CHECK(rc2.layers[0].verticalDatum.value() == 5103);
@@ -87,12 +87,12 @@ TEST_CASE("Vertical CRS GeoKeys support") {
     SUBCASE("EGM2008 geoid") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -108,10 +108,10 @@ TEST_CASE("Vertical CRS GeoKeys support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_vertical_egm2008.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].verticalDatum.has_value());
         CHECK(rc2.layers[0].verticalDatum.value() == 5773);
@@ -125,12 +125,12 @@ TEST_CASE("Vertical CRS GeoKeys support") {
     SUBCASE("Vertical units in feet") {
         auto grid = dp::make_grid<int16_t>(rows, cols, cellSize, true, shift, int16_t{0});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -145,10 +145,10 @@ TEST_CASE("Vertical CRS GeoKeys support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_vertical_feet.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].verticalDatum.has_value());
         CHECK(rc2.layers[0].verticalDatum.value() == 5030);
@@ -161,12 +161,12 @@ TEST_CASE("Vertical CRS GeoKeys support") {
     SUBCASE("No vertical CRS (optional fields not set)") {
         auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{128});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -180,10 +180,10 @@ TEST_CASE("Vertical CRS GeoKeys support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_no_vertical.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK_FALSE(rc2.layers[0].verticalDatum.has_value());
         CHECK_FALSE(rc2.layers[0].verticalUnits.has_value());
@@ -195,12 +195,12 @@ TEST_CASE("Vertical CRS GeoKeys support") {
     SUBCASE("Vertical citation only") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -214,10 +214,10 @@ TEST_CASE("Vertical CRS GeoKeys support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_vertical_citation_only.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].verticalCitation == "Custom vertical datum");
 
@@ -227,12 +227,12 @@ TEST_CASE("Vertical CRS GeoKeys support") {
     SUBCASE("Combined with horizontal citation") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -249,10 +249,10 @@ TEST_CASE("Vertical CRS GeoKeys support") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_vertical_combined.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
         CHECK(rc2.layers[0].geoAsciiParams == "WGS 84");
         CHECK(rc2.layers[0].verticalDatum.has_value());

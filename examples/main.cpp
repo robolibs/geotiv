@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <concord/concord.hpp>
 #include <datapod/datapod.hpp>
 
@@ -22,13 +22,13 @@ int main() {
                 grid(r, c) = ((r / 5 + c / 5) % 2) ? 255 : 0;
 
         // --- 2) Build a RasterCollection around it ---
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer L;
+        rastkit::Layer L;
         L.grid = std::move(grid);
         L.width = static_cast<uint32_t>(cols);
         L.height = static_cast<uint32_t>(rows);
@@ -44,7 +44,7 @@ int main() {
         rc.layers.push_back(std::move(L));
 
         // --- 3) Write out the GeoTIFF in one call ---
-        geotiv::WriteRasterCollection(rc, "output.tif");
+        rastkit::WriteRasterCollection(rc, "output.tif");
         std::cout << "Wrote GeoTIFF " << cols << "x" << rows << " at " << cellSize << "m/px -> output.tif\n";
     } catch (std::exception &e) {
         std::cerr << "ERROR: " << e.what() << "\n";

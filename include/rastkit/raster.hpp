@@ -1,8 +1,8 @@
 #pragma once
 
-#include "geotiv/parser.hpp"
-#include "geotiv/types.hpp"
-#include "geotiv/writter.hpp"
+#include "rastkit/parser.hpp"
+#include "rastkit/types.hpp"
+#include "rastkit/writter.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <unordered_map>
 
-namespace geotiv {
+namespace rastkit {
 
     struct GridLayer {
         dp::Grid<uint8_t> grid;
@@ -371,4 +371,4 @@ namespace geotiv {
         return layer3d;
     }
 
-} // namespace geotiv
+} // namespace rastkit

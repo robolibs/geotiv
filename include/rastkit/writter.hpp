@@ -11,14 +11,14 @@
 #include <string>
 #include <vector>
 
-#include "geotiv/types.hpp"
+#include "rastkit/types.hpp"
 #include <concord/concord.hpp>
 #include <datapod/datapod.hpp>
 
 namespace dp = datapod;
 namespace cc = concord;
 
-namespace geotiv {
+namespace rastkit {
 
     namespace fs = std::filesystem;
 
@@ -81,15 +81,15 @@ namespace geotiv {
 
     /// Write options for GeoTIFF output
     struct WriteOptions {
-        std::string software = "geotiv 0.0.2"; // Software tag (305)
-        std::string datetime = "";             // DateTime tag (306) - empty = current time
-        uint32_t xresolution_num = 72;         // XResolution numerator (default 72 DPI)
-        uint32_t xresolution_den = 1;          // XResolution denominator
-        uint32_t yresolution_num = 72;         // YResolution numerator (default 72 DPI)
-        uint32_t yresolution_den = 1;          // YResolution denominator
-        uint16_t resolution_unit = 2;          // ResolutionUnit: 1=None, 2=Inch (DPI), 3=Centimeter
-        uint32_t rows_per_strip = 0;           // Rows per strip (0 = auto ~8KB, UINT32_MAX = single strip)
-        bool force_bigtiff = false;            // Force BigTIFF format (auto-detected if file > 4GB)
+        std::string software = "rastkit 0.0.2"; // Software tag (305)
+        std::string datetime = "";              // DateTime tag (306) - empty = current time
+        uint32_t xresolution_num = 72;          // XResolution numerator (default 72 DPI)
+        uint32_t xresolution_den = 1;           // XResolution denominator
+        uint32_t yresolution_num = 72;          // YResolution numerator (default 72 DPI)
+        uint32_t yresolution_den = 1;           // YResolution denominator
+        uint16_t resolution_unit = 2;           // ResolutionUnit: 1=None, 2=Inch (DPI), 3=Centimeter
+        uint32_t rows_per_strip = 0;            // Rows per strip (0 = auto ~8KB, UINT32_MAX = single strip)
+        bool force_bigtiff = false;             // Force BigTIFF format (auto-detected if file > 4GB)
     };
 
     /// Write out all layers in rc as a chained-IFD GeoTIFF.
@@ -1025,4 +1025,4 @@ namespace geotiv {
         WriteRasterCollection(rc, outPath);
     }
 
-} // namespace geotiv
+} // namespace rastkit

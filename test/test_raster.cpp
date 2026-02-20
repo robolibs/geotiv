@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
 
-#include "geotiv/raster.hpp"
+#include "rastkit/raster.hpp"
 #include <algorithm>
 #include <filesystem>
 
@@ -10,7 +10,7 @@ TEST_CASE("Raster - Basic Construction") {
     double resolution = 2.0;
 
     SUBCASE("Constructor with default parameters") {
-        geotiv::Raster raster;
+        rastkit::Raster raster;
 
         CHECK(raster.gridCount() == 0);
         CHECK_FALSE(raster.hasGrids());
@@ -19,7 +19,7 @@ TEST_CASE("Raster - Basic Construction") {
     }
 
     SUBCASE("Constructor with all parameters") {
-        geotiv::Raster raster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, resolution);
+        rastkit::Raster raster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, resolution);
 
         CHECK(raster.getDatum().latitude == doctest::Approx(52.0));
         CHECK(raster.getDatum().longitude == doctest::Approx(5.0));
@@ -32,7 +32,7 @@ TEST_CASE("Raster - Basic Construction") {
 TEST_CASE("Raster - Grid Management") {
     dp::Geo datum{52.0, 5.0, 0.0};
     auto rotation = dp::Quaternion::from_euler(0, 0, 0);
-    geotiv::Raster raster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, 1.0);
+    rastkit::Raster raster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, 1.0);
 
     SUBCASE("Add and retrieve grids") {
         raster.addGrid(100, 100, "elevation", "terrain", {{"unit", "meters"}});
@@ -114,7 +114,7 @@ TEST_CASE("Raster - Grid Management") {
 }
 
 TEST_CASE("Raster - Grid Data Operations") {
-    geotiv::Raster raster;
+    rastkit::Raster raster;
     raster.addGrid(10, 10, "test_data", "test");
 
     SUBCASE("Grid data access") {
@@ -146,7 +146,7 @@ TEST_CASE("Raster - Grid Data Operations") {
 }
 
 TEST_CASE("Raster - Properties and Metadata") {
-    geotiv::Raster raster;
+    rastkit::Raster raster;
 
     SUBCASE("CRS and coordinate system") {
         // CRS is always WGS84
@@ -177,7 +177,7 @@ TEST_CASE("Raster - Properties and Metadata") {
 TEST_CASE("Raster - File I/O") {
     dp::Geo datum{52.0, 5.0, 0.0};
     auto rotation = dp::Quaternion::from_euler(0, 0, 0.5);
-    geotiv::Raster originalRaster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, 2.0);
+    rastkit::Raster originalRaster(datum, dp::Pose{dp::Point{0, 0, 0}, rotation}, 2.0);
 
     // Add some test grids
     originalRaster.addTerrainGrid(20, 20, "terrain");
@@ -206,7 +206,7 @@ TEST_CASE("Raster - File I/O") {
         CHECK(std::filesystem::exists(testFile));
 
         // Load from file
-        auto loadedRaster = geotiv::Raster::fromFile(testFile);
+        auto loadedRaster = rastkit::Raster::fromFile(testFile);
 
         CHECK(loadedRaster.gridCount() == 2);
 
@@ -234,7 +234,7 @@ TEST_CASE("Raster - File I/O") {
 }
 
 TEST_CASE("Raster - Error Handling") {
-    geotiv::Raster raster;
+    rastkit::Raster raster;
 
     SUBCASE("Out of range access") {
         CHECK_THROWS_AS(raster.getGrid(0), std::out_of_range);
@@ -243,12 +243,12 @@ TEST_CASE("Raster - Error Handling") {
 
     SUBCASE("File not found") {
         std::filesystem::path nonExistentFile = "/tmp/does_not_exist.tif";
-        CHECK_THROWS(geotiv::Raster::fromFile(nonExistentFile));
+        CHECK_THROWS(rastkit::Raster::fromFile(nonExistentFile));
     }
 }
 
 TEST_CASE("Raster - Iterators") {
-    geotiv::Raster raster;
+    rastkit::Raster raster;
     raster.addGrid(10, 10, "grid1", "type1");
     raster.addGrid(15, 15, "grid2", "type2");
     raster.addGrid(20, 20, "grid3", "type1");
@@ -286,7 +286,7 @@ TEST_CASE("Raster - Iterators") {
 }
 
 TEST_CASE("Raster - Grid Names and Management") {
-    geotiv::Raster raster;
+    rastkit::Raster raster;
 
     SUBCASE("Get grid names") {
         raster.addGrid(10, 10, "alpha", "type1");

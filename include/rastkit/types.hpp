@@ -16,26 +16,26 @@
 namespace dp = datapod;
 namespace pg = pigment;
 
-namespace geotiv {
+namespace rastkit {
 
     using std::uint16_t;
 
     /// Tag number ranges per TIFF 6.0 specification
-    constexpr uint16_t TIFF_RESERVED_MAX = 32767;   // 0-32767 reserved for TIFF standard
-    constexpr uint16_t PRIVATE_TAG_MIN = 32768;     // 32768-65535 for private/custom use
-    constexpr uint16_t GEOTIV_RESERVED_MIN = 50000; // geotiv reserved range start
-    constexpr uint16_t GEOTIV_RESERVED_MAX = 50999; // geotiv reserved range end
+    constexpr uint16_t TIFF_RESERVED_MAX = 32767;    // 0-32767 reserved for TIFF standard
+    constexpr uint16_t PRIVATE_TAG_MIN = 32768;      // 32768-65535 for private/custom use
+    constexpr uint16_t RASTKIT_RESERVED_MIN = 50000; // rastkit reserved range start
+    constexpr uint16_t RASTKIT_RESERVED_MAX = 50999; // rastkit reserved range end
     constexpr uint16_t GLOBAL_PROPERTIES_BASE_TAG = 50100;
 
     /// Check if a tag number is safe for custom use
-    /// Returns true if tag is in private range (>=32768) or geotiv reserved range (50000-50999)
+    /// Returns true if tag is in private range (>=32768) or rastkit reserved range (50000-50999)
     inline bool is_valid_custom_tag(uint16_t tag) {
         // Private range: 32768-65535
         if (tag >= PRIVATE_TAG_MIN) {
             return true;
         }
-        // geotiv reserved range: 50000-50999 (subset of private range, but explicit)
-        if (tag >= GEOTIV_RESERVED_MIN && tag <= GEOTIV_RESERVED_MAX) {
+        // rastkit reserved range: 50000-50999 (subset of private range, but explicit)
+        if (tag >= RASTKIT_RESERVED_MIN && tag <= RASTKIT_RESERVED_MAX) {
             return true;
         }
         return false;
@@ -406,7 +406,7 @@ namespace geotiv {
         inline void setGlobalProperty(const std::string &key, const std::string &value) {
             std::hash<std::string> hasher;
             uint16_t tag = GLOBAL_PROPERTIES_BASE_TAG + (hasher(key) % 1000);
-            // Global properties are in geotiv reserved range, no validation needed
+            // Global properties are in rastkit reserved range, no validation needed
             customTags[tag] = stringToAsciiTag(key + "=" + value);
         }
 
@@ -450,4 +450,4 @@ namespace geotiv {
         }
     };
 
-} // namespace geotiv
+} // namespace rastkit

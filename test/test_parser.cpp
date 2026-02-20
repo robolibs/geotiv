@@ -1,6 +1,6 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <doctest/doctest.h>
 #include <filesystem>
 #include <fstream>
@@ -25,13 +25,13 @@ TEST_CASE("GeoTIFF Parser functionality") {
         }
 
         // Create RasterCollection
-        geotiv::RasterCollection originalRc;
+        rastkit::RasterCollection originalRc;
         // CRS is always WGS84
         originalRc.datum = datum;
         originalRc.shift = shift;
         originalRc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -47,7 +47,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
 
         // Write to file
         std::string testFile = "roundtrip_test.tif";
-        REQUIRE_NOTHROW(geotiv::WriteRasterCollection(originalRc, testFile));
+        REQUIRE_NOTHROW(rastkit::WriteRasterCollection(originalRc, testFile));
         CHECK(std::filesystem::exists(testFile));
 
         // Check file has some reasonable size
@@ -55,9 +55,9 @@ TEST_CASE("GeoTIFF Parser functionality") {
         CHECK(fileSize > 100); // Should be at least 100 bytes for a valid TIFF
 
         // Try reading back - catch and report specific errors
-        geotiv::RasterCollection readRc;
+        rastkit::RasterCollection readRc;
         try {
-            readRc = geotiv::ReadRasterCollection(testFile);
+            readRc = rastkit::ReadRasterCollection(testFile);
         } catch (const std::exception &e) {
             // Log the error and re-throw for investigation
             std::cerr << "Failed to read TIFF file: " << e.what() << std::endl;
@@ -83,7 +83,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
         CHECK(readRc.layers[0].resolution == doctest::Approx(cellSize).epsilon(0.001));
 
         // Verify grid dimensions
-        auto [gridRows, gridCols] = geotiv::get_grid_dimensions(readRc.layers[0].grid);
+        auto [gridRows, gridCols] = rastkit::get_grid_dimensions(readRc.layers[0].grid);
         CHECK(gridRows == rows);
         CHECK(gridCols == cols);
 
@@ -98,7 +98,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
     }
 
     SUBCASE("Read non-existent file should throw") {
-        CHECK_THROWS(geotiv::ReadRasterCollection("non_existent_file.tif"));
+        CHECK_THROWS(rastkit::ReadRasterCollection("non_existent_file.tif"));
     }
 
     SUBCASE("Read invalid file should throw") {
@@ -108,7 +108,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
         ofs << "This is not a TIFF file";
         ofs.close();
 
-        CHECK_THROWS(geotiv::ReadRasterCollection(invalidFile));
+        CHECK_THROWS(rastkit::ReadRasterCollection(invalidFile));
 
         // Clean up
         std::filesystem::remove(invalidFile);
@@ -125,7 +125,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
         auto rotation = dp::Quaternion::from_euler(0, 0, 0);
         dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
-        geotiv::RasterCollection originalRc;
+        rastkit::RasterCollection originalRc;
         // CRS is always WGS84
         originalRc.datum = datum;
         originalRc.shift = shift;
@@ -141,7 +141,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
                 }
             }
 
-            geotiv::Layer layer;
+            rastkit::Layer layer;
             layer.grid = std::move(grid);
             layer.width = static_cast<uint32_t>(cols);
             layer.height = static_cast<uint32_t>(rows);
@@ -153,11 +153,11 @@ TEST_CASE("GeoTIFF Parser functionality") {
 
         // Write to file
         std::string testFile = "multilayer_roundtrip.tif";
-        REQUIRE_NOTHROW(geotiv::WriteRasterCollection(originalRc, testFile));
+        REQUIRE_NOTHROW(rastkit::WriteRasterCollection(originalRc, testFile));
 
         // Read back
-        geotiv::RasterCollection readRc;
-        REQUIRE_NOTHROW(readRc = geotiv::ReadRasterCollection(testFile));
+        rastkit::RasterCollection readRc;
+        REQUIRE_NOTHROW(readRc = rastkit::ReadRasterCollection(testFile));
 
         // Verify structure
         CHECK(readRc.layers.size() == 3);
@@ -193,13 +193,13 @@ TEST_CASE("GeoTIFF Parser functionality") {
             }
         }
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -210,7 +210,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
 
         // Generate TIFF bytes
         std::vector<uint8_t> tiffData;
-        REQUIRE_NOTHROW(tiffData = geotiv::toTiffBytes(rc));
+        REQUIRE_NOTHROW(tiffData = rastkit::toTiffBytes(rc));
 
         // Validate TIFF header structure
         CHECK(tiffData.size() > 8); // Minimum TIFF header size
@@ -229,7 +229,7 @@ TEST_CASE("GeoTIFF Parser functionality") {
 
         // Write and verify file creation
         std::string testFile = "format_validation.tif";
-        REQUIRE_NOTHROW(geotiv::WriteRasterCollection(rc, testFile));
+        REQUIRE_NOTHROW(rastkit::WriteRasterCollection(rc, testFile));
         CHECK(std::filesystem::exists(testFile));
 
         // Verify written file has same header

@@ -1,4 +1,4 @@
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <datapod/datapod.hpp>
 #include <iostream>
 
@@ -47,12 +47,12 @@ int main() {
 
     try {
         // Create RasterCollection with single layer
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = originalGrid;
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -65,7 +65,7 @@ int main() {
 
         rc.layers.push_back(std::move(layer));
 
-        geotiv::WriteRasterCollection(rc, filename);
+        rastkit::WriteRasterCollection(rc, filename);
         std::cout << "Successfully saved Grid to " << filename << std::endl;
 
     } catch (const std::exception &e) {
@@ -77,7 +77,7 @@ int main() {
     std::cout << "\nReading back from GeoTIFF..." << std::endl;
 
     try {
-        auto rc = geotiv::ReadRasterCollection(filename);
+        auto rc = rastkit::ReadRasterCollection(filename);
         std::cout << "Successfully read from " << filename << std::endl;
 
         if (rc.layers.empty()) {

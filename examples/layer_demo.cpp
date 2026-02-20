@@ -1,5 +1,5 @@
-#include "geotiv/geotiv.hpp"
-#include "geotiv/raster.hpp"
+#include "rastkit/rastkit.hpp"
+#include "rastkit/raster.hpp"
 #include <concord/concord.hpp>
 #include <datapod/datapod.hpp>
 #include <filesystem>
@@ -58,7 +58,7 @@ int main() {
     std::cout << "\nSaving to GeoTIFF file: " << filename << std::endl;
 
     try {
-        geotiv::WriteLayerCollection(originalLayer, filename, datum);
+        rastkit::WriteLayerCollection(originalLayer, filename, datum);
         std::cout << "Successfully saved to " << filename << std::endl;
     } catch (const std::exception &e) {
         std::cerr << "Error saving: " << e.what() << std::endl;
@@ -75,7 +75,7 @@ int main() {
     std::cout << "\nReading back from GeoTIFF file..." << std::endl;
 
     try {
-        auto reconstructedLayer = geotiv::ReadLayerCollection<uint8_t>(filename);
+        auto reconstructedLayer = rastkit::ReadLayerCollection<uint8_t>(filename);
         std::cout << "Successfully read from " << filename << std::endl;
 
         // Verify dimensions

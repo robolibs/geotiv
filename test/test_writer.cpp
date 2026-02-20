@@ -1,6 +1,6 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <cstring>
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -26,13 +26,13 @@ TEST_CASE("GeoTIFF Writer functionality") {
         grid(1, 2) = 0;
 
         // Build RasterCollection
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -47,16 +47,16 @@ TEST_CASE("GeoTIFF Writer functionality") {
         rc.layers.push_back(std::move(layer));
 
         // Convert to TIFF bytes
-        REQUIRE_NOTHROW(geotiv::toTiffBytes(rc));
+        REQUIRE_NOTHROW(rastkit::toTiffBytes(rc));
 
-        auto bytes = geotiv::toTiffBytes(rc);
+        auto bytes = rastkit::toTiffBytes(rc);
         CHECK(bytes.size() > 0);
         CHECK(bytes.size() > 8); // At least the TIFF header
     }
 
     SUBCASE("Empty RasterCollection should throw") {
-        geotiv::RasterCollection rc;
-        CHECK_THROWS_WITH(geotiv::toTiffBytes(rc), "toTiffBytes(): no layers");
+        rastkit::RasterCollection rc;
+        CHECK_THROWS_WITH(rastkit::toTiffBytes(rc), "toTiffBytes(): no layers");
     }
 
     SUBCASE("Write and verify file creation") {
@@ -76,13 +76,13 @@ TEST_CASE("GeoTIFF Writer functionality") {
             }
         }
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -98,7 +98,7 @@ TEST_CASE("GeoTIFF Writer functionality") {
 
         // Write to file
         std::string testFile = "test_output.tif";
-        REQUIRE_NOTHROW(geotiv::WriteRasterCollection(rc, testFile));
+        REQUIRE_NOTHROW(rastkit::WriteRasterCollection(rc, testFile));
 
         // Verify file exists and has content
         CHECK(std::filesystem::exists(testFile));
@@ -115,7 +115,7 @@ TEST_CASE("GeoTIFF Writer functionality") {
         auto rotation = dp::Quaternion::from_euler(0, 0, 0);
         dp::Pose shift{dp::Point{0, 0, 0}, rotation};
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         // CRS is always WGS84
         rc.datum = datum;
         rc.shift = shift;
@@ -131,7 +131,7 @@ TEST_CASE("GeoTIFF Writer functionality") {
                 }
             }
 
-            geotiv::Layer layer;
+            rastkit::Layer layer;
             layer.grid = std::move(grid);
             layer.width = static_cast<uint32_t>(cols);
             layer.height = static_cast<uint32_t>(rows);
@@ -148,13 +148,13 @@ TEST_CASE("GeoTIFF Writer functionality") {
         }
 
         // Should be able to convert multi-layer to bytes
-        REQUIRE_NOTHROW(geotiv::toTiffBytes(rc));
-        auto bytes = geotiv::toTiffBytes(rc);
+        REQUIRE_NOTHROW(rastkit::toTiffBytes(rc));
+        auto bytes = rastkit::toTiffBytes(rc);
         CHECK(bytes.size() > 0);
 
         // Write to file
         std::string testFile = "test_multilayer.tif";
-        REQUIRE_NOTHROW(geotiv::WriteRasterCollection(rc, testFile));
+        REQUIRE_NOTHROW(rastkit::WriteRasterCollection(rc, testFile));
 
         CHECK(std::filesystem::exists(testFile));
         CHECK(std::filesystem::file_size(testFile) > 0);
@@ -172,12 +172,12 @@ TEST_CASE("GeoTIFF Writer functionality") {
 
         auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{128});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -194,7 +194,7 @@ TEST_CASE("GeoTIFF Writer functionality") {
 
         rc.layers.push_back(std::move(layer));
 
-        auto bytes = geotiv::toTiffBytes(rc);
+        auto bytes = rastkit::toTiffBytes(rc);
 
         // Parse the IFD to verify tag ordering
         // TIFF header: bytes 0-1 = byte order, 2-3 = magic, 4-7 = IFD offset
@@ -248,12 +248,12 @@ TEST_CASE("GeoTIFF Writer functionality") {
 
         auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{64});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -270,10 +270,10 @@ TEST_CASE("GeoTIFF Writer functionality") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_custom_tags.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify custom tags
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
 
         // Custom tags should be preserved

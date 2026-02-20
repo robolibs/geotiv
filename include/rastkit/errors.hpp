@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace geotiv {
+namespace rastkit {
 
     /// Base exception for all GeoTIFF errors
     class geotiff_error : public std::runtime_error {
@@ -202,4 +202,4 @@ namespace geotiv {
         }
     }
 
-} // namespace geotiv
+} // namespace rastkit

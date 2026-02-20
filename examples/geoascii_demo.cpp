@@ -1,6 +1,6 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <iostream>
 
 int main() {
@@ -11,12 +11,12 @@ int main() {
 
     auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-    geotiv::RasterCollection rc;
+    rastkit::RasterCollection rc;
     rc.datum = datum;
     rc.shift = shift;
     rc.resolution = cellSize;
 
-    geotiv::Layer layer;
+    rastkit::Layer layer;
     layer.grid = std::move(grid);
     layer.width = static_cast<uint32_t>(cols);
     layer.height = static_cast<uint32_t>(rows);
@@ -29,7 +29,7 @@ int main() {
 
     rc.layers.push_back(std::move(layer));
 
-    geotiv::WriteRasterCollection(rc, "geoascii_demo.tif");
+    rastkit::WriteRasterCollection(rc, "geoascii_demo.tif");
 
     std::cout << "Created geoascii_demo.tif with GeoAsciiParams" << std::endl;
     std::cout << "Run: gdalinfo geoascii_demo.tif" << std::endl;

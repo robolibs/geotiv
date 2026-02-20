@@ -1,6 +1,6 @@
 #include <datapod/datapod.hpp>
 namespace dp = datapod;
-#include "geotiv/geotiv.hpp"
+#include "rastkit/rastkit.hpp"
 #include <doctest/doctest.h>
 #include <filesystem>
 #include <fstream>
@@ -13,12 +13,12 @@ TEST_CASE("Metadata tags (Software, DateTime, Resolution)") {
 
     auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{128});
 
-    geotiv::RasterCollection rc;
+    rastkit::RasterCollection rc;
     rc.datum = datum;
     rc.shift = shift;
     rc.resolution = cellSize;
 
-    geotiv::Layer layer;
+    rastkit::Layer layer;
     layer.grid = std::move(grid);
     layer.width = static_cast<uint32_t>(cols);
     layer.height = static_cast<uint32_t>(rows);
@@ -31,31 +31,31 @@ TEST_CASE("Metadata tags (Software, DateTime, Resolution)") {
     rc.layers.push_back(std::move(layer));
 
     SUBCASE("Software tag (305) with default value") {
-        auto bytes = geotiv::toTiffBytes(rc);
+        auto bytes = rastkit::toTiffBytes(rc);
         std::string bytesStr(bytes.begin(), bytes.end());
-        CHECK(bytesStr.find("geotiv 0.0.2") != std::string::npos);
+        CHECK(bytesStr.find("rastkit 0.0.2") != std::string::npos);
     }
 
     SUBCASE("Software tag (305) with custom value") {
-        geotiv::WriteOptions opts;
+        rastkit::WriteOptions opts;
         opts.software = "My Custom GeoTIFF Writer v2.0";
-        auto bytes = geotiv::toTiffBytes(rc, opts);
+        auto bytes = rastkit::toTiffBytes(rc, opts);
         std::string bytesStr(bytes.begin(), bytes.end());
         CHECK(bytesStr.find("My Custom GeoTIFF Writer v2.0") != std::string::npos);
     }
 
     SUBCASE("DateTime tag (306) with custom value") {
-        geotiv::WriteOptions opts;
+        rastkit::WriteOptions opts;
         opts.datetime = "2026:01:02 17:30:00";
-        auto bytes = geotiv::toTiffBytes(rc, opts);
+        auto bytes = rastkit::toTiffBytes(rc, opts);
         std::string bytesStr(bytes.begin(), bytes.end());
         CHECK(bytesStr.find("2026:01:02 17:30:00") != std::string::npos);
     }
 
     SUBCASE("DateTime tag (306) with auto-generated value") {
-        geotiv::WriteOptions opts;
+        rastkit::WriteOptions opts;
         // datetime is empty, should auto-generate
-        auto bytes = geotiv::toTiffBytes(rc, opts);
+        auto bytes = rastkit::toTiffBytes(rc, opts);
         std::string bytesStr(bytes.begin(), bytes.end());
         // Should contain year "202" (2020s)
         CHECK(bytesStr.find("202") != std::string::npos);
@@ -63,7 +63,7 @@ TEST_CASE("Metadata tags (Software, DateTime, Resolution)") {
 
     SUBCASE("Resolution tags (282/283/296) with default 72 DPI") {
         std::string testFile = "test_metadata_default_res.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Parse IFD to verify tags exist
         std::ifstream f(testFile, std::ios::binary);
@@ -99,20 +99,20 @@ TEST_CASE("Metadata tags (Software, DateTime, Resolution)") {
     }
 
     SUBCASE("Resolution tags (282/283/296) with custom 300 DPI") {
-        geotiv::WriteOptions opts;
+        rastkit::WriteOptions opts;
         opts.xresolution_num = 300;
         opts.yresolution_num = 300;
         opts.resolution_unit = 2; // Inch
 
         std::string testFile = "test_metadata_300dpi.tif";
-        geotiv::WriteRasterCollection(rc, testFile, opts);
+        rastkit::WriteRasterCollection(rc, testFile, opts);
 
         CHECK(std::filesystem::exists(testFile));
         std::filesystem::remove(testFile);
     }
 
     SUBCASE("All metadata tags together") {
-        geotiv::WriteOptions opts;
+        rastkit::WriteOptions opts;
         opts.software = "Test Suite v1.0";
         opts.datetime = "2026:01:02 18:00:00";
         opts.xresolution_num = 150;
@@ -120,10 +120,10 @@ TEST_CASE("Metadata tags (Software, DateTime, Resolution)") {
         opts.resolution_unit = 2;
 
         std::string testFile = "test_all_metadata.tif";
-        geotiv::WriteRasterCollection(rc, testFile, opts);
+        rastkit::WriteRasterCollection(rc, testFile, opts);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         CHECK(rc2.layers.size() == 1);
 
         // Verify data integrity
@@ -150,12 +150,12 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
         grid.at(5, 5) = nodataVal;
         grid.at(9, 9) = nodataVal;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -169,10 +169,10 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_nodata_float.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify nodata value is preserved
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
 
         CHECK(rc2.layers[0].noDataValue.has_value());
@@ -194,12 +194,12 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
         grid.at(0, 0) = nodataVal;
         grid.at(3, 7) = nodataVal;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -213,10 +213,10 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_nodata_int16.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
 
         CHECK(rc2.layers[0].noDataValue.has_value());
@@ -232,12 +232,12 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
     SUBCASE("Layer without NoData value (tag should not be written)") {
         auto grid = dp::make_grid<uint8_t>(rows, cols, cellSize, true, shift, uint8_t{128});
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -251,10 +251,10 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_no_nodata.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify nodata is not present
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
 
         CHECK_FALSE(rc2.layers[0].noDataValue.has_value());
@@ -268,12 +268,12 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
         double nodataVal = -9999.123456789;
         grid.at(2, 2) = nodataVal;
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -287,10 +287,10 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_nodata_double.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Read back and verify precision is maintained
-        auto rc2 = geotiv::ReadRasterCollection(testFile);
+        auto rc2 = rastkit::ReadRasterCollection(testFile);
         REQUIRE(rc2.layers.size() == 1);
 
         CHECK(rc2.layers[0].noDataValue.has_value());
@@ -303,12 +303,12 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
     SUBCASE("Verify GDAL_NODATA tag (42113) is written") {
         auto grid = dp::make_grid<float>(rows, cols, cellSize, true, shift, 0.0f);
 
-        geotiv::RasterCollection rc;
+        rastkit::RasterCollection rc;
         rc.datum = datum;
         rc.shift = shift;
         rc.resolution = cellSize;
 
-        geotiv::Layer layer;
+        rastkit::Layer layer;
         layer.grid = std::move(grid);
         layer.width = static_cast<uint32_t>(cols);
         layer.height = static_cast<uint32_t>(rows);
@@ -322,7 +322,7 @@ TEST_CASE("NoData value support (GDAL_NODATA tag 42113)") {
         rc.layers.push_back(std::move(layer));
 
         std::string testFile = "test_nodata_tag42113.tif";
-        geotiv::WriteRasterCollection(rc, testFile);
+        rastkit::WriteRasterCollection(rc, testFile);
 
         // Parse IFD to verify tag 42113 exists
         std::ifstream f(testFile, std::ios::binary);
